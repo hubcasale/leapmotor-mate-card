@@ -5,6 +5,27 @@ Every notable change to this project is recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.4.13] — 2026-10-20
+
+### Fixed
+
+- On a T03 with integration v0.7.4, the per-day energy is written to one
+  decimal. v0.7.4 converts the T03's daily figures from watt-hours and declares
+  `kWh` for them
+  ([kerniger/leapmotor-ha#67](https://github.com/kerniger/leapmotor-ha/issues/67)),
+  so they now pass the unit gate unchanged; rounded to whole kilowatt-hours as
+  the B10's are, the 274 Wh of a two-kilometer day read `0 kWh`. The column
+  takes one decimal as soon as any day has one. A B10, whose cloud sends whole
+  kilowatt-hours, keeps them whole.
+
+### Changed
+
+- The README installs from the HACS default list, which the card joined on
+  2026-10-18, and no longer describes adding it as a custom repository.
+- The documentation no longer describes the T03's `null` unit as current, and
+  notes that v0.7.4 dates each row by its local day instead of the UTC day
+  before it. The card reads `date` and needed no change for that.
+
 ## [0.4.12] — 2026-09-23
 
 ### Changed
