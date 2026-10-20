@@ -32,23 +32,11 @@ is open.
 
 ## Installation — HACS
 
-This repository is not part of the HACS default list, so HACS has to be told
-about it as a **custom repository**. The badge below does exactly that in one
-click: it opens your own Home Assistant, asks you to confirm, and adds this
-repository to HACS.
+Leapmotor Card is in the HACS default list. In HACS, search for **Leapmotor
+Card** and download it; the Lovelace resource is registered automatically.
+The badge below opens the same page in your own Home Assistant in one click.
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=fapgomes&repository=ha-leapmotor-card&category=plugin)
-
-On the page it opens, press **Download**. The Lovelace resource is registered
-automatically.
-
-The same thing by hand, if you prefer:
-
-1. In HACS, open the three-dot menu and choose **Custom repositories**.
-2. Add this repository's URL with type **Dashboard** (the label HACS shows for
-   the category it calls `plugin` internally — older HACS versions called it
-   *Lovelace*).
-3. Download **Leapmotor Card** from HACS.
 
 > **A tagged release is required.** `dist/` is listed in `.gitignore`, so
 > the built `leapmotor-card.js` file does not exist in the repository
