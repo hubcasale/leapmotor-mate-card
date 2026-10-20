@@ -101,7 +101,8 @@ export interface WeeklyConsumption {
  * declarations and the integration now makes both: v0.7.2 added an
  * `energy_scope`, saying what the figure is presumed to count, and v0.7.3 an
  * `energy_unit`, saying what it is measured in — `kWh` on a B10, and `null`
- * on a T03 whose magnitudes contradict that contract. `parseDailyDetail` in
+ * on a T03 whose magnitudes contradict that contract, until v0.7.4 converted
+ * the T03's watt-hours and declared `kWh` for it too. `parseDailyDetail` in
  * `vehicle-state.ts` reads the figure back in only behind both: a scope this
  * card cannot name, or a unit it cannot name, and the field never reaches
  * this structure, so nothing downstream can print it.
@@ -147,13 +148,16 @@ export type EnergyScope = 'driving'
  * `null` on a T03, where the cloud's magnitudes contradict the kWh contract
  * and upstream refuses to guess a factor of a thousand. A unit upstream
  * marks unverified is as unlabelable as an unknown scope, so it is refused
- * in the same place and the same way.
+ * in the same place and the same way. v0.7.4 settled the T03 on watt-hours
+ * from an aligned day (#67), converts them, and declares `kWh` on both cars;
+ * what the cloud sent is in `energy_source_unit`, which the card does not
+ * need, because the figure it prints is the converted one.
  */
 export type EnergyUnit = 'kWh'
 
 /**
  * Why the integration says it published no usable per-day energy, in the
- * card's own vocabulary. `unverified_unit` is the T03 case above;
+ * card's own vocabulary. `unverified_unit` is the T03 case above, on v0.7.3;
  * `incomplete_data` is a period whose readings did not all arrive.
  *
  * It is a REASON and never a permission: nothing here can put a figure back
@@ -210,8 +214,9 @@ export interface DailyBreakdown {
    * days carry an `energyKwh`.
    *
    * Undefined is every integration up to and including v0.7.2, which names no
-   * unit; a T03 on v0.7.3, whose unit is `null`; and equally a later one that
-   * ships a scope or a unit this card has never heard of. An unlabeled energy
+   * unit; a T03 on v0.7.3, whose unit is `null` (v0.7.4 declares `kWh`);
+   * and equally a later one that ships a scope or a unit this card has never
+   * heard of. An unlabeled energy
    * is precisely what 0.4.10 took off the screen, and it does not come back by
    * default.
    */

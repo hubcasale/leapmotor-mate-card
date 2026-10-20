@@ -447,9 +447,10 @@ const KNOWN_ENERGY_SCOPES = new Map<string, EnergyScope>([
  * `kWh` and nothing else, and the spelling is exact after trimming. The
  * mapping is not a normalizer: whatever comes back is printed verbatim beside
  * a number, so a payload that spells the symbol its own way is a payload
- * written by someone whose contract this card has not read. On the T03 this
- * attribute is `null` — upstream will not claim kilowatt-hours for magnitudes
- * that contradict them — and `null` lands where every unknown lands.
+ * written by someone whose contract this card has not read. On a T03 with
+ * integration v0.7.3 this attribute is `null` — upstream will not claim
+ * kilowatt-hours for magnitudes that contradict them — and `null` lands where
+ * every unknown lands.
  */
 const KNOWN_ENERGY_UNITS = new Map<string, EnergyUnit>([
   ['kWh', 'kWh'],
@@ -504,7 +505,8 @@ export function parseEnergyUnavailable(reason: unknown): EnergyUnavailableReason
  * can say what the number is. v0.7.2 says what it is presumed to count and
  * stops there, so it gets no energy; v0.7.3 adds `energy_unit`, which is
  * `kWh` on a B10 and `null` on a T03 whose magnitudes contradict the kWh
- * contract. A unit upstream marks unverified is as unlabelable as an unknown
+ * contract — until v0.7.4, which converts the T03's watt-hours and declares
+ * `kWh` there too. A unit upstream marks unverified is as unlabelable as an unknown
  * scope, and the refusal is structural — the section is never handed a figure
  * it would have to decide not to draw.
  *

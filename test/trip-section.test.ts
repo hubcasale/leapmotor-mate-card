@@ -7,7 +7,8 @@ import type { VehicleState } from '../src/types'
 import { fakeHass } from './helpers/fake-hass'
 import {
   EXPECTED_DAYS, REAL_NOW, REAL_SPECS, SEVEN_DAY_ATTRIBUTES, SEVEN_DAY_ATTRIBUTES_LABELED,
-  SEVEN_DAY_ATTRIBUTES_SCOPED, SEVEN_DAY_ATTRIBUTES_T03, SEVEN_DAY_ATTRIBUTES_UNKNOWN_UNIT,
+  SEVEN_DAY_ATTRIBUTES_SCOPED, SEVEN_DAY_ATTRIBUTES_T03, SEVEN_DAY_ATTRIBUTES_T03_V074,
+  SEVEN_DAY_ATTRIBUTES_UNKNOWN_UNIT,
 } from './fixtures/real-states'
 
 /**
@@ -243,6 +244,29 @@ describe('leapmotor-trip — the per-day block', () => {
     expect(markup.indexOf('trip.daily_energy_no_unit')).toBeLessThan(markup.indexOf('class="day"'))
     // And the distances, which are the block's reason to exist, are all there.
     expect(dayRows(markup)[1]).toBe('Aug 26 99 km')
+  })
+
+  it('writes a T03 on v0.7.4 to one decimal, and a B10 still in whole kWh', () => {
+    // Watt-hours converted to kilowatt-hours: rounded to whole units, the
+    // 274 Wh of a two-kilometer day would read `0 kWh`, a day that cost
+    // nothing. One precision for the whole column, zeros included, so the
+    // figures stay comparable down it.
+    const markup = render(SEVEN_DAY_ATTRIBUTES_T03_V074)
+    expect(dayRows(markup)).toEqual([
+      'Sep 23 13 km · 1.3 kWh',
+      'Sep 22 4 km · 0.5 kWh',
+      'Sep 21 0 km · 0.0 kWh',
+      'Sep 20 5 km · 0.7 kWh',
+      'Sep 19 0 km · 0.0 kWh',
+      'Sep 18 0 km · 0.0 kWh',
+      'Sep 17 2 km · 0.3 kWh',
+    ])
+    expect(markup).toContain('trip.daily_energy_driving_presumed')
+    expect(markup).not.toContain('class="withheld muted"')
+    // The cloud's bare number never reaches the screen.
+    expect(markup).not.toContain('1250')
+    // And the B10, whose cloud sends whole kilowatt-hours, gets no `.0`.
+    expect(dayRows(render(SEVEN_DAY_ATTRIBUTES_LABELED))[1]).toBe('Aug 26 99 km · 14 kWh')
   })
 
   it('says why for an incomplete period too, and never beside an energy', () => {

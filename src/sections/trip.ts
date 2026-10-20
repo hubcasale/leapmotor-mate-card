@@ -194,10 +194,13 @@ export class LeapmotorTrip extends LitElement {
    * not written at all — which is belt and braces, since without it there is
    * no `energyKwh` on the day either.
    *
-   * Whole kilowatt-hours, because whole kilowatt-hours are what the cloud
-   * sends — v0.7.3 states as much in `energy_precision: as_reported_by_cloud`
-   * — so a `.0` after every one of them would be a precision the source does
-   * not have.
+   * The `digits` are the column's, decided once by `dailyBlock` from the
+   * figures themselves. A B10 sends whole kilowatt-hours — v0.7.3 states as
+   * much in `energy_precision: as_reported_by_cloud` — so a `.0` after every
+   * one of them would be a precision the source does not have. A T03 on
+   * v0.7.4 sends watt-hours converted to kilowatt-hours, and rounding those
+   * to whole units would write the 274 Wh of a two-kilometer day as `0 kWh`,
+   * which reads as a day that cost nothing.
    *
    * **No kWh/100 km per day, and these figures are never summed into any
    * consumption the card shows.** Two reasons, either of them sufficient. The
@@ -205,18 +208,19 @@ export class LeapmotorTrip extends LitElement {
    * reading it leaves out climate and accessories, and that reading is
    * unconfirmed — the car's driving energy came to 12.2 kWh/100 km over the
    * two weeks in which its overall consumption was 18.0, so a quotient built
-   * from these rows would need a label the data does not yet support. And the
-   * cloud's own rounding is half a kilowatt-hour a day, which on an
+   * from these rows would need a label the data does not yet support. And on
+   * a B10 the cloud's own rounding is half a kilowatt-hour a day, which on an
    * eleven-kilometer day moves a kWh/100 km result by several units: it would
-   * look like a measurement and be quantization. Consumption is a question
+   * look like a measurement and be quantization. The T03's watt-hours remove
+   * the second reason and leave the first standing. Consumption is a question
    * the weekly series above already answers, over periods where both problems
    * wash out.
    */
-  private dayValue(day: TripDay, unit: EnergyUnit | undefined): string {
+  private dayValue(day: TripDay, unit: EnergyUnit | undefined, digits: number): string {
     const parts: string[] = []
     if (day.distanceKm !== undefined) parts.push(`${formatNumber(day.distanceKm)} km`)
     if (day.energyKwh !== undefined && unit !== undefined) {
-      parts.push(`${formatNumber(day.energyKwh)} ${unit}`)
+      parts.push(`${formatNumber(day.energyKwh, digits)} ${unit}`)
     }
     return this.joined(parts)
   }
@@ -247,12 +251,12 @@ export class LeapmotorTrip extends LitElement {
    * qualify and the integration said why there is none.
    *
    * It is deliberately not a warning and deliberately not always there. A
-   * reader on a T03 sees a column of distances and no kilowatt-hours, and the
-   * honest thing is to say that the integration is withholding them and what
-   * for — but only the integration can say that, and only v0.7.3 and later do.
-   * Everything older declares nothing at all, so a line written from an
-   * absence would appear on most dashboards in the world saying nothing, which
-   * is the definition of noise. Hence `energyUnavailable`, which exists only
+   * reader on a T03 with integration v0.7.3 sees a column of distances and no
+   * kilowatt-hours, and the honest thing is to say that the integration is
+   * withholding them and what for — but only the integration can say that,
+   * and only v0.7.3 and later do. Everything older declares nothing at all, so
+   * a line written from an absence would appear on most dashboards in the
+   * world saying nothing, which is the definition of noise. Hence `energyUnavailable`, which exists only
    * when a reason this card can name actually arrived.
    *
    * Never both lines: `vehicle-state.ts` leaves the reason undefined whenever
@@ -274,7 +278,7 @@ export class LeapmotorTrip extends LitElement {
    * text next to it is what says so — the bar never speaks on its own, which
    * is also why it is hidden from assistive technology.
    */
-  private dayRow(day: TripDay, maxKm: number, unit: EnergyUnit | undefined) {
+  private dayRow(day: TripDay, maxKm: number, unit: EnergyUnit | undefined, digits: number) {
     const km = day.distanceKm
     // One decimal is plenty for a width in percent, and it keeps a
     // 93.33333333333333% out of the DOM of every row.
@@ -282,7 +286,7 @@ export class LeapmotorTrip extends LitElement {
     return html`<div class="day">
       <span class="muted">${formatCalendarDay(day.date, this.language) ?? DASH}</span>
       <span class="bar" aria-hidden="true"><span class="fill" style="width:${width}%"></span></span>
-      <span class="value">${this.dayValue(day, unit)}</span>
+      <span class="value">${this.dayValue(day, unit, digits)}</span>
     </div>`
   }
 
@@ -331,6 +335,12 @@ export class LeapmotorTrip extends LitElement {
     // reader came to look at is the last one, and it should not be at the
     // bottom of eight rows.
     const newestFirst = [...daily.days].reverse()
+    // One precision for the whole column, so the figures stay comparable down
+    // it: a decimal as soon as any day has one, which is a T03 on v0.7.4 and
+    // never a B10. See `dayValue`.
+    const digits = daily.days.some(day => day.energyKwh !== undefined && !Number.isInteger(day.energyKwh))
+      ? 1
+      : 0
     return html`
       <div class="heading muted">
         <span>${this.t('trip.heading_daily')}</span>
@@ -338,7 +348,7 @@ export class LeapmotorTrip extends LitElement {
       </div>
       ${daily.energy !== undefined ? this.scopeNote(daily.energy) : nothing}
       ${daily.energyUnavailable !== undefined ? this.unavailableNote(daily.energyUnavailable) : nothing}
-      ${newestFirst.map(day => this.dayRow(day, maxKm, daily.energy?.unit))}
+      ${newestFirst.map(day => this.dayRow(day, maxKm, daily.energy?.unit, digits))}
     `
   }
 

@@ -273,6 +273,19 @@ upstream refuses to guess a factor of a thousand — together with
 row also gains the cloud's untouched `energy_raw` and an `energy_unit` of its
 own.
 
+**v0.7.4 settles the T03's unit.** A T03 owner matched one day's raw `1250`
+against the 1.3 kWh the cloud reports in kilowatt-hours for the same day, so
+upstream converts the T03's figures from watt-hours and now declares `kWh` on
+both cars, with what the cloud sent in a new `energy_source_unit`
+([kerniger/leapmotor-ha#67](https://github.com/kerniger/leapmotor-ha/issues/67)).
+The card needs no change to accept that: its gate asks for a declared `kWh`,
+and it gets one. It does write those rows to one decimal — `13 km · 1.3 kWh` —
+because whole kilowatt-hours would turn the 274 Wh of a two-kilometer day into
+`0 kWh`; a B10, whose cloud sends whole kilowatt-hours, keeps `99 km · 14 kWh`.
+v0.7.4 also dates each row by its local calendar day instead of the UTC day
+before it, which the card picks up as it is. What the figure counts is still
+unconfirmed on both cars.
+
 Our own measurements, taken after the window was fixed, no longer come apart —
 which is less than it sounds. Two complete Monday-to-Sunday weeks: 2026-09-07
 to 09-13, where the daily rows summed to 38 kWh against the integration's
@@ -303,7 +316,7 @@ The card takes no side in this. It reads `driving_energy_kwh`, falls back to
 `energy_scope` names a scope it understands AND `energy_unit` names a unit it
 can print**. On every integration up to and including v0.7.1 neither attribute
 exists; v0.7.2 has the scope and not the unit; a T03 on v0.7.3 has the scope
-and a `null` unit. In all three the rows stay as they have been since 0.4.10 —
+and a `null` unit (v0.7.4 declares `kWh` and shows the column). In all three the rows stay as they have been since 0.4.10 —
 `99 km` and no more. A scope or a unit the card has never heard of is treated
 the same way, and the check is made twice: the row's own `energy_unit` has to
 be the one the sensor declared, or that row loses its figure, because the

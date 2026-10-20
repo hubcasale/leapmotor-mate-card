@@ -167,9 +167,9 @@ const DAILY_DETAIL_V073 = DAILY_DETAIL_V072.map(day => ({
  * count, and therefore the first on which this card prints them.
  *
  * `energy_unit` is the addition that matters: `kWh` here, `null` on the T03
- * below. The other three are read by nothing — `energy_precision` is upstream
- * stating that the whole-kilowatt-hour rounding happened in the cloud before
- * the integration ever saw the values, `energy_complete_scope` names what
+ * below until v0.7.4. The other three are read by nothing —
+ * `energy_precision` is upstream stating that the whole-kilowatt-hour
+ * rounding happened in the cloud before the integration ever saw the values, `energy_complete_scope` names what
  * `energy_complete` covers, and `energy_unavailable_reason` is `null` because
  * nothing is being withheld.
  *
@@ -189,7 +189,7 @@ export const SEVEN_DAY_ATTRIBUTES_LABELED = {
 }
 
 /**
- * The same integration on a T03, which is the case the unit gate exists for.
+ * Integration v0.7.3 on a T03, which is the case the unit gate exists for.
  * The cloud's magnitudes contradict the kilowatt-hour contract, upstream
  * refuses to guess a factor of a thousand, so it publishes the bare number in
  * `energy_raw`, leaves both kilowatt-hour fields as `None`, and says why in
@@ -213,6 +213,46 @@ export const SEVEN_DAY_ATTRIBUTES_T03 = {
   daily_detail: DAILY_DETAIL_T03,
   energy_unit: null,
   energy_unavailable_reason: 'unverified_unit',
+}
+
+/**
+ * A T03 on integration v0.7.4, from the payload published in
+ * https://github.com/kerniger/leapmotor-ha/issues/67 on 2026-09-23 (vehicle in
+ * Europe/Rome). Upstream matched the day's `1250` against the cloud's own
+ * 1.3 kWh for the same day and settled on watt-hours for this model, so the
+ * rows now carry kilowatt-hours converted from them: `energy_unit` is `kWh`,
+ * `energy_source_unit` says what the cloud sent, and `energy_raw` keeps the
+ * cloud's number.
+ *
+ * Two other v0.7.4 changes show here. `date` is the local calendar day of the
+ * row's local-midnight `timestamp`, where v0.7.3 wrote the UTC day before it,
+ * and `source_date` keeps the cloud's label; the card reads `date` and nothing
+ * else. And the figures have three decimals, which is what the column's
+ * precision has to follow.
+ */
+const DAILY_DETAIL_T03_V074 = [
+  { date: '2026-09-17', source_date: '2026-09-16', mileage_km: 2, energy_raw: 274 },
+  { date: '2026-09-18', source_date: '2026-09-17', mileage_km: 0, energy_raw: 0 },
+  { date: '2026-09-19', source_date: '2026-09-18', mileage_km: 0, energy_raw: 0 },
+  { date: '2026-09-20', source_date: '2026-09-19', mileage_km: 5, energy_raw: 721 },
+  { date: '2026-09-21', source_date: '2026-09-20', mileage_km: 0, energy_raw: 0 },
+  { date: '2026-09-22', source_date: '2026-09-21', mileage_km: 4, energy_raw: 529 },
+  { date: '2026-09-23', source_date: '2026-09-22', mileage_km: 13, energy_raw: 1250 },
+].map(day => ({
+  ...day,
+  driving_energy_kwh: day.energy_raw / 1000,
+  energy_kwh: day.energy_raw / 1000,
+  energy_unit: 'kWh',
+  energy_source_unit: 'Wh',
+}))
+
+export const SEVEN_DAY_ATTRIBUTES_T03_V074 = {
+  ...SEVEN_DAY_ATTRIBUTES_LABELED,
+  daily_detail: DAILY_DETAIL_T03_V074,
+  energy_unit: 'kWh',
+  energy_source_unit: 'Wh',
+  history_timezone: 'Europe/Rome',
+  energy_unavailable_reason: null,
 }
 
 /**

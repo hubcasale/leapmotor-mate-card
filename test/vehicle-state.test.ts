@@ -8,6 +8,7 @@ import { fakeHass, type FakeEntitySpec } from './helpers/fake-hass'
 import {
   EXPECTED_DAYS, EXPECTED_DAYS_WITH_ENERGY, REAL_NOW, REAL_SPECS, SEVEN_DAY_ATTRIBUTES,
   SEVEN_DAY_ATTRIBUTES_LABELED, SEVEN_DAY_ATTRIBUTES_SCOPED, SEVEN_DAY_ATTRIBUTES_T03,
+  SEVEN_DAY_ATTRIBUTES_T03_V074,
   SEVEN_DAY_ATTRIBUTES_UNKNOWN_UNIT, realHass,
 } from './fixtures/real-states'
 
@@ -1126,6 +1127,20 @@ describe('buildVehicleState — daily breakdown', () => {
     expect(daily?.days).toEqual(EXPECTED_DAYS)
     expect(daily?.energy).toBeUndefined()
     expect(daily?.energyUnavailable).toBe('unverified_unit')
+  })
+
+  it('carries the energy on a T03 once v0.7.4 converts it, and gives no reason', () => {
+    // Upstream now publishes kilowatt-hours converted from the cloud's
+    // watt-hours and declares `kWh`, which is the unit the gate asks for. The
+    // figures are the converted ones, never `energy_raw`, and the dates are
+    // the local days v0.7.4 writes.
+    const daily = trip(SEVEN_DAY_ATTRIBUTES_T03_V074).dailyBreakdown
+    expect(daily?.energy).toEqual({ scope: 'driving', unit: 'kWh', confirmed: false })
+    expect(daily?.energyUnavailable).toBeUndefined()
+    expect(daily?.start).toBe('2026-09-17')
+    expect(daily?.end).toBe('2026-09-23')
+    expect(daily?.days[daily.days.length - 1]).toEqual({ date: '2026-09-23', distanceKm: 13, energyKwh: 1.25 })
+    expect(daily?.days[0]).toEqual({ date: '2026-09-17', distanceKm: 2, energyKwh: 0.274 })
   })
 
   it('carries the incomplete-data reason the same way', () => {
