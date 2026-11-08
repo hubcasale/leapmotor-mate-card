@@ -11,7 +11,7 @@ import type { VehicleState } from '../types'
  * the odometer and the temperatures around it. The full trip history is in
  * Mate's own web interface.
  */
-@customElement('leapmotor-trip')
+@customElement('leapmotor-mate-trip')
 export class LeapmotorTrip extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
@@ -41,5 +41,5 @@ export class LeapmotorTrip extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-trip': LeapmotorTrip }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-trip': LeapmotorTrip }
 }

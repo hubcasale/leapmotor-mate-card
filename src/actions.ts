@@ -234,8 +234,8 @@ export interface ActionPayload {
 }
 
 /**
- * The `detail` of the `leapmotor-action` event. Sections don't call
- * services: what they emit is this object, and `leapmotor-card.ts` is what
+ * The `detail` of the `leapmotor-mate-action` event. Sections don't call
+ * services: what they emit is this object, and `leapmotor-mate-card.ts` is what
  * resolves it. It exists as a type — and not as a literal repeated in every
  * emitter — because a swapped `value:` or `payload:` in one of them would
  * compile, pass the tests, and only show up on a user's dashboard with a

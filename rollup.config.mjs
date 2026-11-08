@@ -4,9 +4,9 @@ import terser from '@rollup/plugin-terser'
 import typescript from '@rollup/plugin-typescript'
 
 export default {
-  input: 'src/leapmotor-card.ts',
+  input: 'src/leapmotor-mate-card.ts',
   output: {
-    file: 'dist/leapmotor-card.js',
+    file: 'dist/leapmotor-mate-card.js',
     format: 'es',
     inlineDynamicImports: true,
     sourcemap: false,

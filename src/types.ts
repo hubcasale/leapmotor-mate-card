@@ -39,6 +39,10 @@ export interface LeapmotorCardConfig {
   device?: string
   name?: string
   language?: string
+  /** Which Leapmotor the drawing shows: b10 (default), c10, c11, c16, b05 or t03. */
+  model?: string
+  /** Tint of the drawn body, a plain CSS colour. */
+  car_color?: string
   image?: 'auto' | 'entity' | 'none' | string
   actions?: ActionId[]
   confirm_actions?: ActionId[]

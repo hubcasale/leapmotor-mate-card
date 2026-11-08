@@ -12,7 +12,7 @@ export interface GridTile {
   alert: AlertLevel
 }
 
-@customElement('leapmotor-group-grid')
+@customElement('leapmotor-mate-group-grid')
 export class LeapmotorGroupGrid extends LitElement {
   @property({ attribute: false }) tiles: GridTile[] = []
   @property({ attribute: false }) state!: VehicleState
@@ -27,7 +27,7 @@ export class LeapmotorGroupGrid extends LitElement {
   }
 
   private open(id: GroupId) {
-    this.dispatchEvent(new CustomEvent('leapmotor-open-group', {
+    this.dispatchEvent(new CustomEvent('leapmotor-mate-open-group', {
       detail: { group: id }, bubbles: true, composed: true,
     }))
   }
@@ -104,5 +104,5 @@ export class LeapmotorGroupGrid extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-group-grid': LeapmotorGroupGrid }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-group-grid': LeapmotorGroupGrid }
 }

@@ -5,7 +5,49 @@ Every notable change to this project is recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
-## [0.4.13] — 2026-10-20
+## [0.5.0] — 2026-11-08
+
+First release of **Leapmotor Mate Card**, a fork of
+[fapgomes/ha-leapmotor-card](https://github.com/fapgomes/ha-leapmotor-card)
+0.4.13, which was built for the `kerniger/leapmotor-ha` integration. This one
+talks to [Leapmotor Mate](https://github.com/ProtossBlaster/leapmotor-mate)
+over MQTT discovery instead.
+
+### Changed
+
+- **Entities come from Leapmotor Mate.** The card finds the car by the shape
+  of its entity ids (`<domain>.leapmotor_mate_<last six of the VIN>_<name>`),
+  which Mate publishes in English whatever the language of Home Assistant. No
+  entity registry access is needed. `device` is now the car's id, the whole
+  prefix, or any of its entities, and is only needed with more than one car.
+- **Actions use Mate's buttons.** The sunshade, the climate, the heated
+  steering wheel and mirrors and each seat function are toggled with the
+  matching on/off or open/close button, chosen from the state the car reports.
+  A button Mate hides on a car — as it does for commands that do not work on
+  the B10 — simply gives no control.
+- **The climate panel** shows the target temperature read-only (Mate does not
+  publish it as a setting), and adds the fan speed and recirculation as
+  controls of their own, with an Auto / Off toggle and the Cool, Heat,
+  Ventilation and Defrost buttons.
+- **The Trip sub-view** shows the odometer and the outside temperature: Mate
+  keeps trips in its own database and publishes none over MQTT.
+- The charging schedule panel, the sunshade position slider and the
+  `setClimate` action are gone; none has a Mate equivalent.
+- The location tile no longer names a zone: Mate's tracker says `home`
+  whenever it has coordinates.
+
+### Added
+
+- **Italian** (`it`), next to English and Portuguese.
+- **A drawn car** for the Leapmotor B10 (the default), C10, C11, C16, B05 and
+  T03, generated from their dimensions, in side view in the header and from
+  above under the tyre pressures. New options `model` and `car_color`, also in
+  the visual editor.
+- New actions `quickVentilation`, `climateOff`, `driverSeatHeat`,
+  `driverSeatVent`, `passengerSeatHeat` and `passengerSeatVent`.
+- A render test that mounts the real card in a DOM against a Mate fixture.
+
+## [0.4.13] — — 2026-10-20
 
 ### Fixed
 

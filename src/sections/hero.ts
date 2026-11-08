@@ -6,9 +6,10 @@ import { DASH, formatDuration, type TranslateFn } from '../localize'
 import type { TapDecision } from '../tap-action'
 import { batteryColor, sharedStyles } from '../theme'
 import type { ActionId, EntityMap, VehicleState } from '../types'
-import { CAR_SILHOUETTE } from '../car-silhouette'
+import { carSilhouette } from '../car-silhouette'
+import type { CarModel } from '../car-models'
 
-@customElement('leapmotor-hero')
+@customElement('leapmotor-mate-hero')
 export class LeapmotorHero extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
@@ -23,6 +24,9 @@ export class LeapmotorHero extends LitElement {
   // already handles the "no input URL" case; this prop covers the "URL that
   // fails after mounting" case.
   @property({ type: Boolean }) allowSilhouette = true
+  /** Which Leapmotor to draw when there is no photo, and the tint of its body. */
+  @property({ type: String }) model: CarModel = 'b10'
+  @property({ type: String }) carColor?: string
 
   /**
    * The one-row shape, for when a sub-view is open: name, range, battery and
@@ -35,7 +39,7 @@ export class LeapmotorHero extends LitElement {
   /**
    * The tap on the range, ALREADY decided by the card: this section never
    * sees `hass` or the configuration, the same contract as the map in
-   * `leapmotor-location`. `none` is what puts the number back to being
+   * `leapmotor-mate-location`. `none` is what puts the number back to being
    * inert text.
    */
   @property({ attribute: false }) rangeTap: TapDecision = { kind: 'none' }
@@ -142,7 +146,7 @@ export class LeapmotorHero extends LitElement {
       class="plain value"
       title=${this.t('range_tap')}
       aria-label="${reading} — ${this.t('range_tap')}"
-      @click=${() => this.fire('leapmotor-range-tap')}
+      @click=${() => this.fire('leapmotor-mate-range-tap')}
     >${this.rangeValue()}</button>`
   }
 
@@ -177,7 +181,7 @@ export class LeapmotorHero extends LitElement {
       ?disabled=${shape === 'busy'}
       title=${label}
       aria-label="${this.lockLabel()} — ${label}"
-      @click=${() => this.fire('leapmotor-lock-tap')}
+      @click=${() => this.fire('leapmotor-mate-lock-tap')}
     >${this.lockBody()}</button>`
   }
 
@@ -204,7 +208,7 @@ export class LeapmotorHero extends LitElement {
         ? html`<div class="image">
             ${this.imageUrl && !this.imageFailed
               ? html`<img src=${this.imageUrl} alt=${this.name} @error=${() => { this.imageFailed = true }} />`
-              : (this.allowSilhouette ? CAR_SILHOUETTE : nothing)}
+              : (this.allowSilhouette ? carSilhouette(this.model, this.carColor) : nothing)}
           </div>`
         : nothing}
 
@@ -278,5 +282,5 @@ export class LeapmotorHero extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-hero': LeapmotorHero }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-hero': LeapmotorHero }
 }

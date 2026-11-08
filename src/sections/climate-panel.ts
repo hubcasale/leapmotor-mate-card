@@ -19,7 +19,7 @@ import type { ActionId, EntityMap, VehicleState } from '../types'
  */
 interface Spot { left: string; top: string }
 
-@customElement('leapmotor-climate-panel')
+@customElement('leapmotor-mate-climate-panel')
 export class LeapmotorClimatePanel extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
@@ -34,13 +34,13 @@ export class LeapmotorClimatePanel extends LitElement {
   @property({ attribute: false }) shownLevels: SeatLevels = {}
 
   private fire(action: ActionId, payload?: ActionPayload) {
-    this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-action', {
+    this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-mate-action', {
       detail: { action, payload }, bubbles: true, composed: true,
     }))
   }
 
   private setNumber(key: LogicalKey, value: number) {
-    this.dispatchEvent(new CustomEvent<{ key: LogicalKey; value: number }>('leapmotor-set-number', {
+    this.dispatchEvent(new CustomEvent<{ key: LogicalKey; value: number }>('leapmotor-mate-set-number', {
       detail: { key, value }, bubbles: true, composed: true,
     }))
   }
@@ -48,7 +48,7 @@ export class LeapmotorClimatePanel extends LitElement {
   /** Mate takes the recirculation as a plain on/off switch. */
   private toggleRecirc() {
     const shown = this.state.climate.recirculating
-    this.dispatchEvent(new CustomEvent<{ key: LogicalKey; on: boolean }>('leapmotor-set-switch', {
+    this.dispatchEvent(new CustomEvent<{ key: LogicalKey; on: boolean }>('leapmotor-mate-set-switch', {
       detail: { key: 'recirculation', on: shown === undefined ? true : !shown }, bubbles: true, composed: true,
     }))
   }
@@ -109,7 +109,7 @@ export class LeapmotorClimatePanel extends LitElement {
     const spoken = `${label} · ${shown}`
     return html`<button
       class="plain seat-btn ${level ? 'on' : ''} ${pending ? 'pending' : ''}"
-      @click=${() => this.dispatchEvent(new CustomEvent('leapmotor-seat', { detail: { key }, bubbles: true, composed: true }))}
+      @click=${() => this.dispatchEvent(new CustomEvent('leapmotor-mate-seat', { detail: { key }, bubbles: true, composed: true }))}
       title=${spoken}
       aria-label=${spoken}
       aria-pressed=${level === undefined ? nothing : (level > 0 ? 'true' : 'false')}
@@ -487,5 +487,5 @@ export class LeapmotorClimatePanel extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-climate-panel': LeapmotorClimatePanel }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-climate-panel': LeapmotorClimatePanel }
 }

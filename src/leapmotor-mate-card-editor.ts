@@ -1,3 +1,4 @@
+import { CAR_MODELS } from './car-models'
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state as internalState } from 'lit/decorators.js'
 import type { HomeAssistant } from './ha-types'
@@ -53,7 +54,7 @@ function actionOptionLabel(t: (k: string) => string, a: ActionId): string {
   return t(ACTION_LABEL_KEY[a] ?? `action.${a}`)
 }
 
-@customElement('leapmotor-card-editor')
+@customElement('leapmotor-mate-card-editor')
 export class LeapmotorCardEditor extends LitElement {
   @internalState() private _config?: LeapmotorCardConfig
   @property({ attribute: false }) public hass?: HomeAssistant
@@ -65,8 +66,18 @@ export class LeapmotorCardEditor extends LitElement {
 
   private schema(t: (k: string) => string) {
     return [
-      { name: 'device', selector: { device: { integration: 'leapmotor' } } },
+      // The car's id (the last six characters of its VIN, as in `leapmotor_mate_xxxxxx_…`).
+      // Only needed with more than one Leapmotor car; the card finds a single one by itself.
+      { name: 'device', selector: { text: {} } },
       { name: 'name', selector: { text: {} } },
+      {
+        name: 'model',
+        selector: { select: { mode: 'dropdown', options: [
+          { value: '', label: t('editor.model_auto') },
+          ...Object.entries(CAR_MODELS).map(([value, m]) => ({ value, label: `Leapmotor ${m.name}` })),
+        ] } },
+      },
+      { name: 'car_color', selector: { text: {} } },
       {
         name: 'language',
         // The language names stay in their own language, by convention for
@@ -74,6 +85,7 @@ export class LeapmotorCardEditor extends LitElement {
         // Only the automatic option goes through `t()`.
         selector: { select: { mode: 'dropdown', options: [
           { value: '', label: t('editor.language_auto') },
+          { value: 'it', label: 'Italiano' },
           { value: 'pt', label: 'Português' },
           { value: 'en', label: 'English' },
         ] } },
@@ -121,6 +133,8 @@ export class LeapmotorCardEditor extends LitElement {
    */
   private computeLabel = (t: (k: string) => string) => (s: { name: string }): string => {
     if (s.name === 'map_zoom') return t('editor.map_zoom')
+    if (s.name === 'model') return t('editor.model')
+    if (s.name === 'car_color') return t('editor.car_color')
     if (s.name === 'tire_range') return t('editor.tire_range')
     if (s.name === 'range_tap_action') return t('editor.range_tap_action')
     return s.name
@@ -129,12 +143,14 @@ export class LeapmotorCardEditor extends LitElement {
   private valueChanged(e: CustomEvent<{ value: Record<string, unknown> }>) {
     const raw = { ...e.detail.value }
     if (raw.language === '') delete raw.language
+    if (raw.model === '') delete raw.model
+    if (raw.car_color === '') delete raw.car_color
     // `sections` no longer exists in the type, but it may exist in
     // configurations that have not been migrated yet — `ha-form` returns
     // everything it was given, so it is here, in the editor, that the dead
     // key finally disappears.
     delete (raw as Record<string, unknown>)['sections']
-    const config = { type: 'custom:leapmotor-card', ...raw } as LeapmotorCardConfig
+    const config = { type: 'custom:leapmotor-mate-card', ...raw } as LeapmotorCardConfig
     this._config = config
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config }, bubbles: true, composed: true }))
   }
@@ -193,7 +209,7 @@ export class LeapmotorCardEditor extends LitElement {
       .filter(row => row.on)
       .map(row => this._longForm.get(row.id) ?? row.id)
 
-    const config = { ...this._config, type: 'custom:leapmotor-card', grid } as LeapmotorCardConfig
+    const config = { ...this._config, type: 'custom:leapmotor-mate-card', grid } as LeapmotorCardConfig
     this._config = config
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config }, bubbles: true, composed: true }))
   }
@@ -291,5 +307,5 @@ export class LeapmotorCardEditor extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-card-editor': LeapmotorCardEditor }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-card-editor': LeapmotorCardEditor }
 }

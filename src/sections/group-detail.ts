@@ -4,7 +4,7 @@ import type { TranslateFn } from '../localize'
 import { INTERACTIVE_SELECTOR, decideSwipe } from '../swipe'
 import { sharedStyles } from '../theme'
 
-@customElement('leapmotor-group-detail')
+@customElement('leapmotor-mate-group-detail')
 export class LeapmotorGroupDetail extends LitElement {
   @property({ attribute: false }) t!: TranslateFn
   @property({ type: String }) heading = ''
@@ -32,8 +32,8 @@ export class LeapmotorGroupDetail extends LitElement {
     this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true }))
   }
 
-  private nav(delta: -1 | 1) { this.emit('leapmotor-nav', { delta }) }
-  private close() { this.emit('leapmotor-close') }
+  private nav(delta: -1 | 1) { this.emit('leapmotor-mate-nav', { delta }) }
+  private close() { this.emit('leapmotor-mate-close') }
 
   private onKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape') { e.stopPropagation(); this.close(); return }
@@ -147,5 +147,5 @@ export class LeapmotorGroupDetail extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-group-detail': LeapmotorGroupDetail }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-group-detail': LeapmotorGroupDetail }
 }

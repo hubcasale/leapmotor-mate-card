@@ -6,7 +6,7 @@ import { GESTURE_OWNER_CLASS } from '../swipe'
 import { sharedStyles } from '../theme'
 import type { VehicleState } from '../types'
 
-@customElement('leapmotor-location')
+@customElement('leapmotor-mate-location')
 export class LeapmotorLocation extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
@@ -57,5 +57,5 @@ export class LeapmotorLocation extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-location': LeapmotorLocation }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-location': LeapmotorLocation }
 }

@@ -1,6 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
-import { CAR_TOPVIEW } from '../car-topview'
+import type { CarModel } from '../car-models'
+import { carTopview } from '../car-topview'
 import { formatNumber } from '../format'
 import type { TranslateFn } from '../localize'
 import { sharedStyles } from '../theme'
@@ -13,7 +14,7 @@ const CORNERS = [
   { key: 'rr', tk: 'tires.corner_rr', area: 'rr' },
 ] as const
 
-@customElement('leapmotor-tires')
+@customElement('leapmotor-mate-tires')
 export class LeapmotorTires extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
@@ -24,6 +25,8 @@ export class LeapmotorTires extends LitElement {
    * and not `range` so as not to be confused with the driving range, which
    * in `VehicleState` is also `range`.
    */
+  /** Which Leapmotor to draw under the four pressures. */
+  @property({ type: String }) model: CarModel = 'b10'
   @property({ attribute: false }) limits: readonly [number, number] = DEFAULT_TIRE_RANGE
 
   private outOfRange(v: number | undefined): boolean {
@@ -37,7 +40,7 @@ export class LeapmotorTires extends LitElement {
     return html`<div class="panel">
       <div class="title">${this.t('tires.title')}</div>
       <div class="diagram">
-        <div class="car">${CAR_TOPVIEW}</div>
+        <div class="car">${carTopview(this.model)}</div>
         ${CORNERS.map(c => html`
           <div class="corner ${c.area} ${this.outOfRange(tires[c.key]) ? 'warn' : ''}">
             <div class="pressure">
@@ -94,5 +97,5 @@ export class LeapmotorTires extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-tires': LeapmotorTires }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-tires': LeapmotorTires }
 }

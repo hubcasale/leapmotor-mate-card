@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import pkg from '../package.json'
-import cardSource from '../src/leapmotor-card.ts?raw'
+import cardSource from '../src/leapmotor-mate-card.ts?raw'
 
 /**
  * The `1 + 1 === 2` that used to be here didn't distinguish any implementation.

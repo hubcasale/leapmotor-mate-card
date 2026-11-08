@@ -8,7 +8,7 @@ import type { ActionId, EntityMap, VehicleState } from '../types'
 
 interface LevelRow { key: SeatLevelKey; label: string; value: number | undefined; icon: string }
 
-@customElement('leapmotor-comfort')
+@customElement('leapmotor-mate-comfort')
 export class LeapmotorComfort extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
@@ -25,7 +25,7 @@ export class LeapmotorComfort extends LitElement {
   @property({ attribute: false }) shownLevels: SeatLevels = {}
 
   private fireAction(action: ActionId) {
-    this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-action', {
+    this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-mate-action', {
       detail: { action }, bubbles: true, composed: true,
     }))
   }
@@ -41,7 +41,7 @@ export class LeapmotorComfort extends LitElement {
       <span class="muted"><ha-icon icon=${row.icon}></ha-icon> ${row.label}${shown ? ` · ${shown}` : ''}</span>
       <button
         class="plain toggle ${shown ? 'on' : ''} ${pending ? 'pending' : ''}"
-        @click=${() => this.dispatchEvent(new CustomEvent('leapmotor-seat', { detail: { key: row.key }, bubbles: true, composed: true }))}
+        @click=${() => this.dispatchEvent(new CustomEvent('leapmotor-mate-seat', { detail: { key: row.key }, bubbles: true, composed: true }))}
         title=${row.label}
         aria-label=${row.label}
         aria-pressed=${shown === undefined ? nothing : (shown > 0 ? 'true' : 'false')}
@@ -100,5 +100,5 @@ export class LeapmotorComfort extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-comfort': LeapmotorComfort }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-comfort': LeapmotorComfort }
 }

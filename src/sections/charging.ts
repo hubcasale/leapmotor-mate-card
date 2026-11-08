@@ -5,7 +5,7 @@ import { DASH, formatDuration, type TranslateFn } from '../localize'
 import { sharedStyles } from '../theme'
 import type { VehicleState } from '../types'
 
-@customElement('leapmotor-charging')
+@customElement('leapmotor-mate-charging')
 export class LeapmotorCharging extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
@@ -52,7 +52,7 @@ export class LeapmotorCharging extends LitElement {
 
   private onSlider(e: Event) {
     const value = Number((e.target as HTMLInputElement).value)
-    this.dispatchEvent(new CustomEvent('leapmotor-set-charge-limit', {
+    this.dispatchEvent(new CustomEvent('leapmotor-mate-set-charge-limit', {
       detail: { value }, bubbles: true, composed: true,
     }))
     this.editing = false
@@ -116,5 +116,5 @@ export class LeapmotorCharging extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-charging': LeapmotorCharging }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-charging': LeapmotorCharging }
 }

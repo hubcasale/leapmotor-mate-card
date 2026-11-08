@@ -7,7 +7,7 @@ import type { TranslateFn } from '../localize'
 import { sharedStyles } from '../theme'
 import type { ActionId, EntityMap, VehicleState } from '../types'
 
-@customElement('leapmotor-actions-row')
+@customElement('leapmotor-mate-actions-row')
 export class LeapmotorActionsRow extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
@@ -22,7 +22,7 @@ export class LeapmotorActionsRow extends LitElement {
   }
 
   private fire(action: ActionId) {
-    this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-action', {
+    this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-mate-action', {
       detail: { action }, bubbles: true, composed: true,
     }))
   }
@@ -70,5 +70,5 @@ export class LeapmotorActionsRow extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-actions-row': LeapmotorActionsRow }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-actions-row': LeapmotorActionsRow }
 }

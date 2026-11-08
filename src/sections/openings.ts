@@ -21,7 +21,7 @@ interface Row {
   action?: ActionId
 }
 
-@customElement('leapmotor-openings')
+@customElement('leapmotor-mate-openings')
 export class LeapmotorOpenings extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
@@ -166,7 +166,7 @@ export class LeapmotorOpenings extends LitElement {
   }
 
   private fire(action: ActionId) {
-    this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-action', {
+    this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-mate-action', {
       detail: { action }, bubbles: true, composed: true,
     }))
   }
@@ -242,5 +242,5 @@ export class LeapmotorOpenings extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-openings': LeapmotorOpenings }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-openings': LeapmotorOpenings }
 }

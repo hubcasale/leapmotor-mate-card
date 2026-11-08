@@ -6,6 +6,7 @@ import {
   type ActionEventDetail, type ActionPayload,
   type SeatLevels, type SeatRequests, type ServiceCall,
 } from './actions'
+import { pickModel } from './car-models'
 import { formatUpdated } from './format'
 import {
   GROUP_ORDER, alertFor, estimateCardSize, missingForGroups, resolveGrid, summaryFor,
@@ -36,11 +37,11 @@ import './sections/tires'
 import './sections/trip'
 import './sections/comfort'
 
-export const CARD_VERSION = '0.4.13'
+export const CARD_VERSION = '0.5.0'
 
 
 console.info(
-  `%c LEAPMOTOR-CARD %c ${CARD_VERSION} `,
+  `%c LEAPMOTOR-MATE-CARD %c ${CARD_VERSION} `,
   'color:#fff;background:#1f6feb;border-radius:3px 0 0 3px',
   'color:#1f6feb;background:#e8f0fe;border-radius:0 3px 3px 0',
 )
@@ -61,7 +62,7 @@ console.info(
  */
 const CORE_KEYS: LogicalKey[] = ['battery', 'lock']
 
-@customElement('leapmotor-card')
+@customElement('leapmotor-mate-card')
 export class LeapmotorCard extends LitElement {
   @internalState() private _hass?: HomeAssistant
   @internalState() private _config?: LeapmotorCardConfig
@@ -91,8 +92,8 @@ export class LeapmotorCard extends LitElement {
   }
 
   public static async getConfigElement() {
-    await import('./leapmotor-card-editor')
-    return document.createElement('leapmotor-card-editor')
+    await import('./leapmotor-mate-card-editor')
+    return document.createElement('leapmotor-mate-card-editor')
   }
 
   public static getStubConfig(hass: HomeAssistant): LeapmotorCardConfig {
@@ -102,7 +103,7 @@ export class LeapmotorCard extends LitElement {
         .map(e => e.device_id)
         .filter((d): d is string => !!d),
     )]
-    return { type: 'custom:leapmotor-card', ...(devices.length === 1 ? { device: devices[0] } : {}) }
+    return { type: 'custom:leapmotor-mate-card', ...(devices.length === 1 ? { device: devices[0] } : {}) }
   }
 
   public setConfig(config: LeapmotorCardConfig): void {
@@ -349,7 +350,7 @@ export class LeapmotorCard extends LitElement {
     const id = this._focusGroup
     if (!id) return
     this._focusGroup = undefined
-    this.renderRoot.querySelector<LeapmotorGroupGrid>('leapmotor-group-grid')?.focusTile(id)
+    this.renderRoot.querySelector<LeapmotorGroupGrid>('leapmotor-mate-group-grid')?.focusTile(id)
   }
 
   override render() {
@@ -385,7 +386,7 @@ export class LeapmotorCard extends LitElement {
     // Spec §6: in `entity` mode there is no fallback to the silhouette — the
     // space stays empty whether due to a missing URL (showImage=false), or
     // because the URL fails after being mounted (allowSilhouette=false, see
-    // leapmotor-hero).
+    // leapmotor-mate-hero).
     const showImage = imageMode !== 'none' && !(imageMode === 'entity' && !imageUrl)
     const allowSilhouette = imageMode !== 'entity'
 
@@ -476,38 +477,38 @@ export class LeapmotorCard extends LitElement {
       switch (group.id) {
         case 'charging':
           return html`
-            <leapmotor-charging
+            <leapmotor-mate-charging
               .state=${state} .t=${t} .language=${language}
               .limitEditable=${!!map.chargeLimitSet}
               .limitMin=${attr<number>(hass, map, 'chargeLimitSet', 'min') ?? 50}
               .limitMax=${attr<number>(hass, map, 'chargeLimitSet', 'max') ?? 100}
               .limitStep=${attr<number>(hass, map, 'chargeLimitSet', 'step') ?? 5}
-            ></leapmotor-charging>`
+            ></leapmotor-mate-charging>`
         case 'status':
           return html`
-            <leapmotor-openings
+            <leapmotor-mate-openings
               .state=${state} .t=${t} .map=${map} .pending=${this._pending}
-            ></leapmotor-openings>
+            ></leapmotor-mate-openings>
             `
         case 'climate':
           return html`
-            <leapmotor-climate-panel
+            <leapmotor-mate-climate-panel
               .state=${state} .t=${t} .map=${map}
               .shownLevels=${shownLevels}
               .maxLevel=${attr<number>(hass, map, 'driverSeatHeat', 'max') ?? 3}
-            ></leapmotor-climate-panel>
-            <leapmotor-comfort
+            ></leapmotor-mate-climate-panel>
+            <leapmotor-mate-comfort
               .state=${state} .t=${t} .map=${map} .shownLevels=${shownLevels}
               .maxLevel=${attr<number>(hass, map, 'driverSeatHeat', 'max') ?? 3}
-            ></leapmotor-comfort>`
+            ></leapmotor-mate-comfort>`
         case 'tires':
-          return html`<leapmotor-tires .state=${state} .t=${t} .limits=${tireRange}></leapmotor-tires>`
+          return html`<leapmotor-mate-tires .state=${state} .t=${t} .limits=${tireRange} .model=${pickModel(config.model, name)}></leapmotor-mate-tires>`
         case 'trip':
-          return html`<leapmotor-trip .state=${state} .t=${t} .language=${language}></leapmotor-trip>`
+          return html`<leapmotor-mate-trip .state=${state} .t=${t} .language=${language}></leapmotor-mate-trip>`
         case 'location':
-          return html`<leapmotor-location
+          return html`<leapmotor-mate-location
             .state=${state} .t=${t} .mapElement=${this._mapElement}
-          ></leapmotor-location>`
+          ></leapmotor-mate-location>`
       }
     }
 
@@ -516,13 +517,13 @@ export class LeapmotorCard extends LitElement {
     if (this._openGroup === 'location' && map.location) this.ensureMap(map.location)
 
     return html`<ha-card
-      @leapmotor-action=${onAction}
-      @leapmotor-set-charge-limit=${onLimit}
-      @leapmotor-set-number=${onSetNumber}
-      @leapmotor-set-switch=${onSetSwitch}
-      @leapmotor-seat=${onSeat}
-      @leapmotor-range-tap=${onRangeTap}
-      @leapmotor-lock-tap=${onLockTap}
+      @leapmotor-mate-action=${onAction}
+      @leapmotor-mate-set-charge-limit=${onLimit}
+      @leapmotor-mate-set-number=${onSetNumber}
+      @leapmotor-mate-set-switch=${onSetSwitch}
+      @leapmotor-mate-seat=${onSeat}
+      @leapmotor-mate-range-tap=${onRangeTap}
+      @leapmotor-mate-lock-tap=${onLockTap}
     >
       <div class="body">
         ${/*
@@ -539,22 +540,23 @@ export class LeapmotorCard extends LitElement {
           ? html`<ha-alert alert-type="warning">${t('error.unknown_group', { groups: grid.unknown.join(', ') })}</ha-alert>`
           : nothing}
 
-        <leapmotor-hero
+        <leapmotor-mate-hero
           .state=${state} .t=${t} .now=${now} .name=${name}
           .language=${language} .imageUrl=${imageUrl}
           .showImage=${showImage} .allowSilhouette=${allowSilhouette}
+          .model=${pickModel(config.model, name)} .carColor=${config.car_color}
           .compact=${openGroup !== undefined}
           .rangeTap=${rangeTap} .map=${map} .pending=${this._pending}
-        ></leapmotor-hero>
+        ></leapmotor-mate-hero>
 
         ${openGroup === undefined
           ? html`
-            <leapmotor-actions-row
+            <leapmotor-mate-actions-row
               .state=${state} .t=${t} .map=${map} .actions=${actions} .pending=${this._pending}
-            ></leapmotor-actions-row>
+            ></leapmotor-mate-actions-row>
 
             ${grid.groups.length > 0
-              ? html`<leapmotor-group-grid
+              ? html`<leapmotor-mate-group-grid
                   .state=${state}
                   .tiles=${grid.groups.map((group): GridTile => ({
                     group,
@@ -562,18 +564,18 @@ export class LeapmotorCard extends LitElement {
                     summary: summaryFor(group, state, t, language),
                     alert: alertFor(group, state, tireRange),
                   }))}
-                  @leapmotor-open-group=${onOpenGroup}
-                ></leapmotor-group-grid>`
+                  @leapmotor-mate-open-group=${onOpenGroup}
+                ></leapmotor-mate-group-grid>`
               : nothing}`
           : html`
-            <leapmotor-group-detail
+            <leapmotor-mate-group-detail
               .t=${t}
               .heading=${openGroup.titleOverride ?? t(openGroup.titleKey)}
               .navigable=${grid.groups.length > 1}
               .updatedLabel=${formatUpdated(state.lastUpdate, now, t, language)}
-              @leapmotor-close=${onCloseGroup}
-              @leapmotor-nav=${onNav}
-            >${panelsFor(openGroup)}</leapmotor-group-detail>`}
+              @leapmotor-mate-close=${onCloseGroup}
+              @leapmotor-mate-nav=${onNav}
+            >${panelsFor(openGroup)}</leapmotor-mate-group-detail>`}
 
         ${(() => {
           // The core keys are always reported; the groups' keys, only with a
@@ -606,5 +608,5 @@ export class LeapmotorCard extends LitElement {
 }
 
 declare global {
-  interface HTMLElementTagNameMap { 'leapmotor-card': LeapmotorCard }
+  interface HTMLElementTagNameMap { 'leapmotor-mate-card': LeapmotorCard }
 }
