@@ -101,6 +101,12 @@ load:
   Serve Mate over `https` too, or use the next option.
 - Mate has a password set: the picture needs the login cookie. Use the next
   option.
+- Mate answers *"only with a password … or name this host in
+  `MATE_ALLOWED_HOSTS`"*: without a password Mate only answers on the names of
+  a home network (an IP address, `localhost`, a name without dots, `.local`,
+  `.lan`, …). Use the IP address in `mate_url`, or add the name you use to
+  `MATE_ALLOWED_HOSTS` in Mate's environment and restart it — only behind a VPN
+  or an authenticating proxy, because the name then reaches Mate unprotected.
 
 **Either way:** open `http://<mate>:4000/api/car-picture` once, save the image
 to `config/www/b10.png` and set `image: /local/b10.png`.

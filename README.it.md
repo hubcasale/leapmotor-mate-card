@@ -102,6 +102,13 @@ raggiungibile da dove guardi la dashboard. Due casi in cui non si carica:
   bloccano. Servi anche Mate in `https`, oppure usa l'opzione qui sotto.
 - Mate ha una password: la foto richiede il cookie di accesso. Usa l'opzione
   qui sotto.
+- Mate risponde *«solo con una password … oppure scrivi quel nome in
+  `MATE_ALLOWED_HOSTS`»*: senza password Mate risponde solo ai nomi di una rete
+  di casa (un indirizzo IP, `localhost`, un nome senza punti, `.local`, `.lan`,
+  …). Usa l'indirizzo IP in `mate_url`, oppure aggiungi il nome che usi a
+  `MATE_ALLOWED_HOSTS` nell'ambiente di Mate e riavvialo — solo dietro una VPN o
+  un proxy con autenticazione, perché da quel momento il nome raggiunge Mate
+  senza protezione.
 
 **In entrambi i casi:** apri una volta `http://<mate>:4000/api/car-picture`,
 salva l'immagine in `config/www/b10.png` e imposta `image: /local/b10.png`.
