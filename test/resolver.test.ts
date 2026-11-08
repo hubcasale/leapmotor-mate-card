@@ -1,104 +1,129 @@
-import { describe, expect, it, vi } from 'vitest'
-import { loadRegistryFallback, resolveEntities } from '../src/resolver'
-import { displayEntry, fakeHass } from './helpers/fake-hass'
+import { describe, expect, it } from 'vitest'
+import { ENTITY_KEYS, type EntityDef, type LogicalKey } from '../src/keys'
+import { resolveEntities } from '../src/resolver'
+import { fakeHass } from './helpers/fake-hass'
+import { CAR, id, mateSpecs } from './fixtures/mate-states'
 
-const CONFIG = { type: 'custom:leapmotor-card' }
+const CONFIG = { type: 'custom:leapmotor-mate-card' }
 
-const BASE = [
-  { key: 'sensor/battery_percent', entity_id: 'sensor.b10_battery', state: '60', unit: '%' },
-  { key: 'sensor/remaining_range_km', entity_id: 'sensor.b10_range', state: '217', unit: 'km' },
-  { key: 'sensor/live_remaining_range_km', entity_id: 'sensor.b10_main_live_range', state: '261', unit: 'km' },
-  { key: 'lock/vehicle_lock', entity_id: 'lock.b10_lock', state: 'locked' },
-]
-
-describe('resolveEntities', () => {
-  it('discovers the single Leapmotor device when config.device is omitted', () => {
-    const hass = fakeHass(BASE, { dev1: { name_by_user: 'B10 Demo' } })
-    const r = resolveEntities(hass, CONFIG)
+describe('resolveEntities — one Mate car', () => {
+  it('finds the only car without being told which', () => {
+    const r = resolveEntities(fakeHass(mateSpecs()), CONFIG)
     expect(r.error).toBeUndefined()
-    expect(r.deviceId).toBe('dev1')
-    expect(r.deviceName).toBe('B10 Demo')
-    expect(r.map.battery).toBe('sensor.b10_battery')
+    expect(r.deviceId).toBe(CAR)
+    expect(r.map.battery).toBe(id('sensor', 'battery'))
+    expect(r.map.lock).toBe(id('lock', 'door_lock'))
   })
 
-  it('resolves entities whose entity_id prefix differs from the device', () => {
-    // `..._main_live_range` doesn't share the prefix of the others; the
-    // mapping is by translation_key, so it still has to be found.
-    const hass = fakeHass(BASE, { dev1: {} })
-    expect(resolveEntities(hass, CONFIG).map.rangeLive).toBe('sensor.b10_main_live_range')
+  it('maps every logical name Mate publishes, and none that it does not', () => {
+    const r = resolveEntities(fakeHass(mateSpecs()), CONFIG)
+    const published = (Object.entries(ENTITY_KEYS) as [LogicalKey, EntityDef][]).filter(([, d]) => d.slug !== null)
+    // Everything Mate publishes in the fixture resolves…
+    const unresolved = published.map(([key]) => key).filter(key => !r.map[key])
+    expect(unresolved).toEqual([])
+    // …and a name Mate does not publish is never resolved by accident.
+    for (const [key, def] of Object.entries(ENTITY_KEYS) as [LogicalKey, EntityDef][]) {
+      if (def.slug === null) expect(r.map[key], key).toBeUndefined()
+    }
   })
 
-  it('returns an ambiguous error when there are two cars and no device in the config', () => {
-    const hass = fakeHass(
-      [...BASE, { key: 'sensor/battery_percent', entity_id: 'sensor.t03_battery', device_id: 'dev2', state: '40', unit: '%' }],
-      { dev1: { name_by_user: 'B10 Demo' }, dev2: { name: 'T03' } },
-    )
-    const r = resolveEntities(hass, CONFIG)
-    expect(r.error).toBe('ambiguous')
-    expect(r.candidates.map(c => c.name).sort()).toEqual(['B10 Demo', 'T03'])
+  it('tells apart the two entities that share a slug (binary sensor and switch "Trunk")', () => {
+    const r = resolveEntities(fakeHass(mateSpecs()), CONFIG)
+    expect(r.map.trunk).toBe(id('binary_sensor', 'trunk'))
   })
 
-  it('accepts an explicit device_id', () => {
-    const hass = fakeHass(BASE, { dev1: {} })
-    expect(resolveEntities(hass, { ...CONFIG, device: 'dev1' }).deviceId).toBe('dev1')
+  it('does not list as missing a name Mate never publishes', () => {
+    const r = resolveEntities(fakeHass(mateSpecs()), CONFIG)
+    expect(r.missing).not.toContain('batteryPrecise')
+    expect(r.missing).not.toContain('schedulePlanned')
   })
 
-  it('accepts an entity_id as the device', () => {
-    const hass = fakeHass(BASE, { dev1: {} })
-    expect(resolveEntities(hass, { ...CONFIG, device: 'lock.b10_lock' }).deviceId).toBe('dev1')
+  it('lists as missing what Mate publishes but this car does not have (the B10 comfort case)', () => {
+    const r = resolveEntities(fakeHass(mateSpecs({ 'button/driver_seat_heat_on': null, 'button/steering_heat_on': null })), CONFIG)
+    expect(r.missing).toContain('driverSeatHeatOn')
+    expect(r.missing).toContain('steeringWheelHeatOn')
+    expect(r.map.driverSeatHeatOn).toBeUndefined()
   })
 
-  it('returns unknown_device for a device that does not exist', () => {
-    const hass = fakeHass(BASE, { dev1: {} })
-    expect(resolveEntities(hass, { ...CONFIG, device: 'dev9' }).error).toBe('unknown_device')
+  it('ignores entities of other integrations', () => {
+    const noise = [{ entity_id: 'sensor.garage_temperature', state: '12' }, { entity_id: 'sensor.leapmotor_battery', state: '50' }]
+    const r = resolveEntities(fakeHass([...mateSpecs(), ...noise]), CONFIG)
+    expect(r.candidates).toHaveLength(1)
   })
 
-  it('returns not_found after the fallback also comes up empty', () => {
-    // With `extra` provided (even empty), the fallback has already run: the
-    // terminal state is not_found, not needsFallback.
-    const hass = fakeHass([], {})
-    expect(resolveEntities(hass, CONFIG, []).error).toBe('not_found')
+  it('returns not_found when there is no Mate entity at all', () => {
+    const r = resolveEntities(fakeHass([{ entity_id: 'sensor.garage_temperature', state: '12' }]), CONFIG)
+    expect(r.error).toBe('not_found')
+    expect(r.map).toEqual({})
   })
 
-  it('lets the config overrides win over discovery', () => {
-    const hass = fakeHass(BASE, { dev1: {} })
-    const r = resolveEntities(hass, { ...CONFIG, entities: { range: 'sensor.b10_main_live_range' } })
-    expect(r.map.range).toBe('sensor.b10_main_live_range')
+  it('names the car after its Home Assistant device when there is one', () => {
+    const specs = mateSpecs().map(s => ({ ...s, device_id: 'dev1' }))
+    const r = resolveEntities(fakeHass(specs, { dev1: { name: 'Leapmotor Mate 5R1234', name_by_user: 'La mia B10' } }), CONFIG)
+    expect(r.deviceName).toBe('La mia B10')
   })
 
-  it('lists the unresolved keys in missing', () => {
-    const hass = fakeHass(BASE, { dev1: {} })
-    const r = resolveEntities(hass, CONFIG)
-    expect(r.missing).toContain('interiorTemp')
-    expect(r.missing).not.toContain('battery')
-  })
-
-  it('signals needsFallback when hass.entities is empty, and resolves with extra', () => {
-    const hass = fakeHass(BASE, { dev1: {} }, { omitEntities: true })
-    expect(resolveEntities(hass, CONFIG).needsFallback).toBe(true)
-
-    const extra = BASE.map(s => displayEntry(s.key, s.entity_id))
-    const r = resolveEntities(hass, CONFIG, extra)
-    expect(r.needsFallback).toBe(false)
-    expect(r.map.battery).toBe('sensor.b10_battery')
-  })
-
-  it('prefers the device\'s name_by_user over its name', () => {
-    const hass = fakeHass(BASE, { dev1: { name: 'Leapmotor B10 2025', name_by_user: 'B10 Demo' } })
-    expect(resolveEntities(hass, CONFIG).deviceName).toBe('B10 Demo')
+  it('falls back to the id in capitals for the name', () => {
+    expect(resolveEntities(fakeHass(mateSpecs()), CONFIG).deviceName).toBe('Leapmotor 5R1234')
   })
 })
 
-describe('loadRegistryFallback', () => {
-  it('requests config/entity_registry/list and filters by the integration', async () => {
-    const callWS = vi.fn().mockResolvedValue([
-      { entity_id: 'sensor.b10_battery', device_id: 'dev1', platform: 'leapmotor', translation_key: 'battery_percent' },
-      { entity_id: 'sensor.other', device_id: 'dev5', platform: 'mqtt', translation_key: null },
-    ])
-    const hass = { ...fakeHass([], {}), callWS } as never
-    const out = await loadRegistryFallback(hass)
-    expect(callWS).toHaveBeenCalledWith({ type: 'config/entity_registry/list' })
-    expect(out).toHaveLength(1)
-    expect(out[0].translation_key).toBe('battery_percent')
+describe('resolveEntities — several cars', () => {
+  const two = () => fakeHass([...mateSpecs(), ...mateSpecs({}, 'abc999')])
+
+  it('asks which one when there are two and none is chosen', () => {
+    const r = resolveEntities(two(), CONFIG)
+    expect(r.error).toBe('ambiguous')
+    expect(r.candidates.map(c => c.id).sort()).toEqual(['5r1234', 'abc999'])
+  })
+
+  it('accepts the id, the whole prefix, or any entity of the car as `device`', () => {
+    for (const device of ['abc999', 'ABC999', 'leapmotor_mate_abc999', id('sensor', 'battery', 'abc999')]) {
+      const r = resolveEntities(two(), { ...CONFIG, device })
+      expect(r.deviceId, device).toBe('abc999')
+      expect(r.map.battery).toBe(id('sensor', 'battery', 'abc999'))
+    }
+  })
+
+  it('accepts the Home Assistant device id', () => {
+    const specs = [...mateSpecs().map(s => ({ ...s, device_id: 'devA' })), ...mateSpecs({}, 'abc999').map(s => ({ ...s, device_id: 'devB' }))]
+    const r = resolveEntities(fakeHass(specs, { devA: { name: 'A' }, devB: { name: 'B' } }), { ...CONFIG, device: 'devB' })
+    expect(r.deviceId).toBe('abc999')
+  })
+
+  it('returns unknown_device for a car that does not exist', () => {
+    expect(resolveEntities(two(), { ...CONFIG, device: 'zzz000' }).error).toBe('unknown_device')
+  })
+})
+
+describe('resolveEntities — entity overrides', () => {
+  it('lets `entities` replace one logical name', () => {
+    const r = resolveEntities(fakeHass(mateSpecs()), { ...CONFIG, entities: { range: 'sensor.my_own_range' } })
+    expect(r.map.range).toBe('sensor.my_own_range')
+  })
+
+  it('takes an override out of the missing list', () => {
+    const r = resolveEntities(fakeHass(mateSpecs({ 'sensor/range': null })), { ...CONFIG, entities: { range: 'sensor.my_own_range' } })
+    expect(r.missing).not.toContain('range')
+  })
+})
+
+describe('ENTITY_KEYS', () => {
+  it('has no two logical names sharing one entity, except the charge limit read and write', () => {
+    const seen = new Map<string, LogicalKey>()
+    const shared: string[] = []
+    for (const [key, def] of Object.entries(ENTITY_KEYS) as [LogicalKey, EntityDef][]) {
+      if (def.slug === null) continue
+      const k = `${def.domain}/${def.slug}`
+      if (seen.has(k)) shared.push(`${seen.get(k)}+${key}`)
+      seen.set(k, key)
+    }
+    expect(shared).toEqual(['chargeLimit+chargeLimitSet'])
+  })
+
+  it('uses only slugs made of lowercase letters, digits and underscores', () => {
+    for (const [key, def] of Object.entries(ENTITY_KEYS) as [LogicalKey, EntityDef][]) {
+      if (def.slug !== null) expect(def.slug, key).toMatch(/^[a-z0-9_]+$/)
+    }
   })
 })

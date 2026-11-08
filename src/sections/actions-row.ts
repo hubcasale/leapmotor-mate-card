@@ -1,7 +1,7 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
 import {
-  BLOCKED_WHILE_DRIVING, CONTROL_PANEL, actionIcon, actionLabel, isActionAvailable, type ActionEventDetail,
+  BLOCKED_WHILE_DRIVING, actionIcon, actionLabel, isActionAvailable, type ActionEventDetail,
 } from '../actions'
 import type { TranslateFn } from '../localize'
 import { sharedStyles } from '../theme'
@@ -22,20 +22,6 @@ export class LeapmotorActionsRow extends LitElement {
   }
 
   private fire(action: ActionId) {
-    // Actions with a panel (e.g. sunshade) don't call a service from here:
-    // they need a value that only their own panel supplies. The button only
-    // asks the card to expand that panel — see spec v2, finding 4. The
-    // panel comes from a per-action map, not from a fixed constant: a
-    // value-taking action with no panel of its own (e.g. setClimate)
-    // already fails `isActionAvailable` and never becomes a button here —
-    // see the additional finding after item 8.
-    const panel = CONTROL_PANEL[action]
-    if (panel) {
-      this.dispatchEvent(new CustomEvent('leapmotor-expand', {
-        detail: { panel }, bubbles: true, composed: true,
-      }))
-      return
-    }
     this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-action', {
       detail: { action }, bubbles: true, composed: true,
     }))

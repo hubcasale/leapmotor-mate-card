@@ -1,9 +1,9 @@
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit'
 import { customElement, state as internalState } from 'lit/decorators.js'
 import {
-  DEFAULT_FAN_SPEED, actionLabel, composeClimateCommand, decideAction, forgetRequest, lockToggleAction,
-  pendingValue, pruneRequests, resolveAction,
-  type ActionEventDetail, type ActionPayload, type ClimateChange, type ClimateIntent, type ExpandPanel,
+  actionLabel, decideAction, forgetRequest, lockToggleAction,
+  pruneRequests, resolveAction,
+  type ActionEventDetail, type ActionPayload,
   type SeatLevels, type SeatRequests, type ServiceCall,
 } from './actions'
 import { formatUpdated } from './format'
@@ -11,10 +11,10 @@ import {
   GROUP_ORDER, alertFor, estimateCardSize, missingForGroups, resolveGrid, summaryFor,
   type ResolvedGroup,
 } from './groups'
-import type { HassEntityDisplayEntry, HomeAssistant } from './ha-types'
-import { SEAT_LEVEL_KEYS, isSeatLevelKey, type LogicalKey } from './keys'
+import type { HomeAssistant } from './ha-types'
+import { SEAT_LEVEL_KEYS, type LogicalKey, type SeatLevelKey } from './keys'
 import { createTranslator, pickLanguage, type TranslateFn } from './localize'
-import { loadRegistryFallback, resolveEntities, type ResolveResult } from './resolver'
+import { resolveEntities, type ResolveResult } from './resolver'
 import type { GridTile, LeapmotorGroupGrid } from './sections/group-grid'
 import { resolveTapAction, type TapDecision } from './tap-action'
 import { sharedStyles } from './theme'
@@ -29,26 +29,15 @@ import './sections/actions-row'
 import './sections/charging'
 import './sections/location'
 import './sections/climate-panel'
-import './sections/sunshade-control'
 import './sections/openings'
 import './sections/group-grid'
 import './sections/group-detail'
 import './sections/tires'
 import './sections/trip'
 import './sections/comfort'
-import './sections/schedule'
 
 export const CARD_VERSION = '0.4.13'
 
-/**
- * Wait time before sending the temperature. `leapmotor.set_climate` is not
- * a setpoint: each send is a command that turns on the climate control.
- * Without this grouping, three taps on the "+" would be three calls to the
- * cloud. It lives here, not in the climate panel, because the card survives
- * the panel's collapse — the panel is destroyed on the next tap on the tile,
- * and a `setTimeout` of its own would never get to fire (spec v2, finding 3).
- */
-const CLIMATE_SEND_DELAY_MS = 1200
 
 console.info(
   `%c LEAPMOTOR-CARD %c ${CARD_VERSION} `,
@@ -58,11 +47,11 @@ console.info(
 
 ;(window as unknown as { customCards?: unknown[] }).customCards ||= []
 ;(window as unknown as { customCards: unknown[] }).customCards.push({
-  type: 'leapmotor-card',
-  name: 'Leapmotor Card',
-  description: 'Leapmotor vehicle card mirroring the official app layout',
+  type: 'leapmotor-mate-card',
+  name: 'Leapmotor Mate Card',
+  description: 'Leapmotor vehicle card for Leapmotor Mate: battery, charging, climate, openings, tyres and location',
   preview: true,
-  documentationURL: 'https://github.com/fapgomes/ha-leapmotor-card',
+  documentationURL: 'https://github.com/hubcasale/leapmotor-mate-card',
 })
 
 /**
@@ -77,28 +66,12 @@ export class LeapmotorCard extends LitElement {
   @internalState() private _hass?: HomeAssistant
   @internalState() private _config?: LeapmotorCardConfig
   @internalState() private _pending?: ActionId
-  @internalState() private _fallback?: HassEntityDisplayEntry[]
-  @internalState() private _expanded?: ExpandPanel
   @internalState() private _openGroup?: GroupId
   /** The group to return focus to after closing. See spec §4.5. */
   private _focusGroup?: GroupId
   /**
-   * Everything the card knows about climate control that the car does not
-   * report: what the user requested and has not yet been confirmed (along
-   * with the reading the car gave at the moment of each request, see
-   * `pendingValue`) and the fan speed, which the integration does not expose
-   * at all. It lives here, and not in the panel, because the panel is
-   * destroyed every time the tile collapses: a request stored there would
-   * vanish with it, the next command would fall back on the stale reading
-   * and silently undo what the user had just asked for — and the fan would
-   * go back to 3, which is the default `set_climate` restores for whatever
-   * is not sent. It is not cleared after being sent: only the car resolves a
-   * request, either confirming it or reporting something else.
-   */
-  private _climateIntent: ClimateIntent = { fanSpeed: DEFAULT_FAN_SPEED }
-  /**
    * The seat levels requested and not yet confirmed, for the same reason and
-   * with the same discipline as `_climateIntent`: the panel used to store
+   * (Mate confirms a command a minute or so later): the panel used to store
    * them, and nothing cleared them once resolved — a heating that switched
    * itself off made the old request take effect again, the pin ended up
    * showing a level the seat no longer had, and the next tap skipped a
@@ -107,23 +80,13 @@ export class LeapmotorCard extends LitElement {
    */
   private _seatRequests: SeatRequests = {}
 
-  private _fallbackRequested = false
-  private _resolveCache?: { entities: unknown; config: unknown; fallback: unknown; result: ResolveResult }
+  private _resolveCache?: { count: number; entities: unknown; config: unknown; result: ResolveResult }
   private _mapElement?: HTMLElement
   private _mapRequested = false
   private _mapRequest?: MapRequest
-  private _climateTimer?: number
 
   override disconnectedCallback(): void {
     super.disconnectedCallback()
-    // The card is only destroyed along with the whole dashboard view, unlike
-    // the climate panel (destroyed on every tile collapse) — a pending send
-    // here is much less likely to be lost. Even so, cancel it.
-    if (this._climateTimer !== undefined) {
-      window.clearTimeout(this._climateTimer)
-      this._climateTimer = undefined
-    }
-    this._climateIntent = { fanSpeed: DEFAULT_FAN_SPEED }
     this._seatRequests = {}
   }
 
@@ -145,23 +108,15 @@ export class LeapmotorCard extends LitElement {
   public setConfig(config: LeapmotorCardConfig): void {
     if (!config) throw new Error('Invalid configuration')
     this._config = { ...config }
-    this._fallbackRequested = false
-    this._fallback = undefined
     this._resolveCache = undefined
     // Everything that follows belonged to the previous car. Without this,
     // changing `device` in the editor left the map pinning the old car
     // (`ensureMap` bails out right at the start because of `_mapRequested`)
     // and showed one car's unconfirmed requests as if they belonged to the
     // other.
-    if (this._climateTimer !== undefined) {
-      // A "+" tapped on car A had 1200 ms in which to fire against car B.
-      window.clearTimeout(this._climateTimer)
-      this._climateTimer = undefined
-    }
     this._mapRequested = false
     this._mapElement = undefined
     this._mapRequest = undefined
-    this._climateIntent = { fanSpeed: DEFAULT_FAN_SPEED }
     this._seatRequests = {}
   }
 
@@ -179,7 +134,7 @@ export class LeapmotorCard extends LitElement {
   public getCardSize(): number {
     const config = this._config
     const result = this.resolved()
-    const resolved = config && result && !result.error && !result.needsFallback
+    const resolved = config && result && !result.error
     // Without a resolution yet, it isn't known which groups the car exposes,
     // but it is known how many were requested — and reporting the size of
     // the loading line made the masonry balance the columns around a card
@@ -245,20 +200,18 @@ export class LeapmotorCard extends LitElement {
     const config = this._config
     if (!hass || !config) return undefined
 
+    // Mate's entities are found by the shape of their entity_id, so the
+    // resolution only changes when entities appear or disappear: the count of
+    // states is the cheap signal for that, and it keeps the per-update cost
+    // at one comparison instead of a scan of every entity in the house.
+    const count = Object.keys(hass.states).length
     const cache = this._resolveCache
-    if (cache && cache.entities === hass.entities && cache.config === config && cache.fallback === this._fallback) {
+    if (cache && cache.count === count && cache.entities === hass.entities && cache.config === config) {
       return cache.result
     }
 
-    const result = resolveEntities(hass, config, this._fallback)
-    this._resolveCache = { entities: hass.entities, config, fallback: this._fallback, result }
-
-    if (result.needsFallback && !this._fallbackRequested) {
-      this._fallbackRequested = true
-      loadRegistryFallback(hass)
-        .then(entries => { this._fallback = entries })
-        .catch(() => { this._fallback = [] })
-    }
+    const result = resolveEntities(hass, config)
+    this._resolveCache = { count, entities: hass.entities, config, result }
 
     return result
   }
@@ -299,75 +252,6 @@ export class LeapmotorCard extends LitElement {
   }
 
   /**
-   * Stores the change in the intent and arms the timer. It groups a burst of
-   * taps and sends a single command, after `CLIMATE_SEND_DELAY_MS` — see the
-   * comment on that constant. What accumulates is the intent, field by
-   * field, and not the last payload: the panel's controls change different
-   * fields of the same command, and replacing it would lose what the
-   * previous tap had changed.
-   */
-  private queueClimate(change: ClimateChange, state: VehicleState) {
-    // The reading stored with the request is the one from the moment of the
-    // tap — it is what tells, later on, whether the car has already reacted
-    // (see `pendingValue`).
-    const intent = this._climateIntent
-    if (change.temperature !== undefined) {
-      intent.temperature = { wanted: change.temperature, reading: state.climate.targetC }
-    }
-    if (change.recirculate !== undefined) {
-      intent.recirculate = { wanted: change.recirculate, reading: state.climate.recirculating }
-    }
-    // The intent is deliberately not `@internalState`: `render` also clears
-    // it, and a reactive field written from within `render` would schedule
-    // a cascading update. The one that needs to request the re-render is
-    // this path, the tap's.
-    this.requestUpdate()
-    if (this._climateTimer !== undefined) window.clearTimeout(this._climateTimer)
-    this._climateTimer = window.setTimeout(() => {
-      this._climateTimer = undefined
-      this.sendClimate()
-    }, CLIMATE_SEND_DELAY_MS)
-  }
-
-  /**
-   * `set_climate` resets to defaults whatever is not sent, so the command
-   * always goes out complete: each field comes from the unconfirmed request,
-   * or from the car's reading, or — only when there is neither one nor the
-   * other — from the service's own default. The final 24 and `false` are
-   * not readings.
-   */
-  private sendClimate() {
-    // State read now, and not at the moment of the tap: between the tap and
-    // the send, 1200 ms pass during which the car (or the app) may have
-    // changed something, and whatever nobody requested should go out with
-    // the current value, not the one from a second ago.
-    const result = this.resolved()
-    if (!result || result.error || !this._hass) return
-    const map = result.map
-    const state = buildVehicleState(this._hass, map, new Date())
-    const intent = this._climateIntent
-    const call = resolveAction('setClimate', state, map, { climate: composeClimateCommand(intent, state) })
-    if (!call || !this._hass) return
-    // The same requests this command carried, kept by identity: if the call
-    // fails, we give up on them — but only if in the meantime they have not
-    // been replaced by a new tap, which is still valid.
-    const sent = { temperature: intent.temperature, recirculate: intent.recirculate }
-    void this.doCall(call).catch(err => {
-      let dropped = false
-      if (this._climateIntent.temperature === sent.temperature && sent.temperature !== undefined) {
-        this._climateIntent.temperature = undefined
-        dropped = true
-      }
-      if (this._climateIntent.recirculate === sent.recirculate && sent.recirculate !== undefined) {
-        this._climateIntent.recirculate = undefined
-        dropped = true
-      }
-      if (dropped) this.requestUpdate()
-      this.notifyError(err)
-    })
-  }
-
-  /**
    * Carries out a tap already decided by `resolveTapAction`. It is the dirty
    * half — events, history, `window`, `hass` — deliberately kept apart from
    * the pure half, which is the one the tests can reach.
@@ -404,13 +288,7 @@ export class LeapmotorCard extends LitElement {
 
   private async doCall(call: ServiceCall, extra?: Record<string, unknown>) {
     const data = { ...call.data, ...extra }
-    if (call.entityIdAsField) {
-      // The `leapmotor.*` services receive the vehicle as a field, not as a
-      // target. See spec v2 §2.5.
-      await this._hass!.callService(call.domain, call.service, { ...data, entity_id: call.entityId })
-    } else {
-      await this._hass!.callService(call.domain, call.service, data, { entity_id: call.entityId })
-    }
+    await this._hass!.callService(call.domain, call.service, data, { entity_id: call.entityId })
   }
 
   // `hass.callService` rejects silently in a custom card — HA does not show
@@ -444,7 +322,7 @@ export class LeapmotorCard extends LitElement {
   override willUpdate() {
     if (!this._openGroup || !this._config) return
     const result = this.resolved()
-    if (!result || result.error || result.needsFallback) return
+    if (!result || result.error) return
     const { groups } = resolveGrid(this._config, result.map)
     if (!groups.some(group => group.id === this._openGroup)) this.showGroup(undefined)
   }
@@ -459,7 +337,6 @@ export class LeapmotorCard extends LitElement {
    * both directions, so it lives here and not on one side.
    */
   private showGroup(group: GroupId | undefined): void {
-    this._expanded = undefined
     this._openGroup = group
   }
 
@@ -484,7 +361,7 @@ export class LeapmotorCard extends LitElement {
     const t = createTranslator(language)
     const result = this.resolved()
 
-    if (!result || result.needsFallback) {
+    if (!result) {
       return html`<ha-card><div class="body loading">${t('loading')}</div></ha-card>`
     }
 
@@ -532,14 +409,6 @@ export class LeapmotorCard extends LitElement {
       // what gets called cannot diverge.
       void this.callAction(lockToggleAction(state), state, map, t, undefined, true)
     }
-    const onExpand = (e: CustomEvent<{ panel: ExpandPanel | null }>) => {
-      // Only a single expandable panel remains, the sunshade:
-      // `leapmotor-actions-row` always sends 'sunshade' and
-      // `leapmotor-sunshade-control` always sends null. Toggling here is
-      // what allows closing the panel from the same button that opened it.
-      const panel = e.detail.panel
-      this._expanded = panel === this._expanded ? undefined : (panel ?? undefined)
-    }
     const onLimit = (e: CustomEvent<{ value: number }>) => {
       const call = resolveAction('setChargeLimit', state, map)
       if (call) void this.doCall(call, { value: e.detail.value }).catch(err => this.notifyError(err))
@@ -548,34 +417,26 @@ export class LeapmotorCard extends LitElement {
       const { key, value } = e.detail
       const entityId = map[key]
       if (!entityId || !this._hass) return
-      // Recorded here and not in the section that emitted it: either of the
-      // two (the climate panel, the comfort section) can disappear between
-      // the request and the confirmation, and the request must not
-      // disappear with it.
-      const seatKey = isSeatLevelKey(key) ? key : undefined
-      const request = seatKey ? { wanted: value, reading: state.comfort[seatKey] } : undefined
-      if (seatKey && request) {
-        this._seatRequests[seatKey] = request
-        this.requestUpdate()
-      }
       void this._hass.callService('number', 'set_value', { value }, { entity_id: entityId })
-        .catch(err => {
-          // The call failed: no reading will ever resolve this request,
-          // because the car never got to know about it. Leaving it would
-          // show a level the seat does not have, and make the next tap
-          // start from it.
-          if (seatKey && request && forgetRequest(this._seatRequests, seatKey, request)) this.requestUpdate()
-          this.notifyError(err)
-        })
+        .catch(err => this.notifyError(err))
     }
-    const onClimateChange = (e: CustomEvent<ClimateChange>) => {
-      this.queueClimate(e.detail, state)
-    }
-    const onFanSpeed = (e: CustomEvent<{ value: number }>) => {
-      // Stored, not sent: the speed only reaches the car on the next
-      // `set_climate`, together with the temperature and the recirculation.
-      this._climateIntent.fanSpeed = e.detail.value
+    /**
+     * A seat on/off. Mate reports the result a minute or so later, so the
+     * request is kept here — not in the section, which can be destroyed
+     * meanwhile — and shown as pending until the car's reading moves.
+     */
+    const onSeat = (e: CustomEvent<{ key: SeatLevelKey }>) => {
+      const key = e.detail.key
+      const wanted = (state.comfort[key] ?? 0) > 0 ? 0 : 1
+      const request = { wanted, reading: state.comfort[key] }
+      this._seatRequests[key] = request
       this.requestUpdate()
+      const call = resolveAction(key, state, map)
+      if (!call) { forgetRequest(this._seatRequests, key, request); return }
+      void this.doCall(call).catch(err => {
+        if (forgetRequest(this._seatRequests, key, request)) this.requestUpdate()
+        this.notifyError(err)
+      })
     }
     const onSetSwitch = (e: CustomEvent<{ key: LogicalKey; on: boolean }>) => {
       const entityId = map[e.detail.key]
@@ -599,18 +460,6 @@ export class LeapmotorCard extends LitElement {
       this.showGroup(grid.groups[(index + e.detail.delta + size) % size]!.id)
     }
 
-    // A request the car has already resolved — either confirming it or
-    // contradicting it — stops existing here, and not merely being shown:
-    // if it stayed stored, it would come back to life the moment the
-    // reading returned to what it was at the time of the request, and for a
-    // boolean like recirculation, "returning to what it was" is the normal
-    // case. This is a cache clear, not reactive state: what it erases is
-    // already outside this render.
-    const pendingTemp = pendingValue(this._climateIntent.temperature, state.climate.targetC)
-    const pendingRecirc = pendingValue(this._climateIntent.recirculate, state.climate.recirculating)
-    if (pendingTemp === undefined) this._climateIntent.temperature = undefined
-    if (pendingRecirc === undefined) this._climateIntent.recirculate = undefined
-
     // The same cleanup for the seat levels, and in the same place. Here it
     // fits into a helper because the four requests have the same shape; the
     // two climate-intent fields have different types and stay in the two
@@ -633,25 +482,17 @@ export class LeapmotorCard extends LitElement {
               .limitMin=${attr<number>(hass, map, 'chargeLimitSet', 'min') ?? 50}
               .limitMax=${attr<number>(hass, map, 'chargeLimitSet', 'max') ?? 100}
               .limitStep=${attr<number>(hass, map, 'chargeLimitSet', 'step') ?? 5}
-            ></leapmotor-charging>
-            <leapmotor-schedule .state=${state} .t=${t} .map=${map}></leapmotor-schedule>`
+            ></leapmotor-charging>`
         case 'status':
-          // The sunshade panel comes to the status sub-view for the same
-          // reason it already came to the grid: it is what chooses the
-          // position the command requires, and without it the roof line
-          // would have a button with nowhere to go.
           return html`
             <leapmotor-openings
               .state=${state} .t=${t} .map=${map} .pending=${this._pending}
             ></leapmotor-openings>
-            ${this._expanded === 'sunshade'
-              ? html`<leapmotor-sunshade-control .t=${t}></leapmotor-sunshade-control>`
-              : nothing}`
+            `
         case 'climate':
           return html`
             <leapmotor-climate-panel
-              .state=${state} .t=${t} .map=${map} .fanSpeed=${this._climateIntent.fanSpeed}
-              .pendingTemp=${pendingTemp} .pendingRecirc=${pendingRecirc}
+              .state=${state} .t=${t} .map=${map}
               .shownLevels=${shownLevels}
               .maxLevel=${attr<number>(hass, map, 'driverSeatHeat', 'max') ?? 3}
             ></leapmotor-climate-panel>
@@ -679,9 +520,7 @@ export class LeapmotorCard extends LitElement {
       @leapmotor-set-charge-limit=${onLimit}
       @leapmotor-set-number=${onSetNumber}
       @leapmotor-set-switch=${onSetSwitch}
-      @leapmotor-fan-speed=${onFanSpeed}
-      @leapmotor-climate-change=${onClimateChange}
-      @leapmotor-expand=${onExpand}
+      @leapmotor-seat=${onSeat}
       @leapmotor-range-tap=${onRangeTap}
       @leapmotor-lock-tap=${onLockTap}
     >
@@ -713,10 +552,6 @@ export class LeapmotorCard extends LitElement {
             <leapmotor-actions-row
               .state=${state} .t=${t} .map=${map} .actions=${actions} .pending=${this._pending}
             ></leapmotor-actions-row>
-
-            ${this._expanded === 'sunshade'
-              ? html`<leapmotor-sunshade-control .t=${t}></leapmotor-sunshade-control>`
-              : nothing}
 
             ${grid.groups.length > 0
               ? html`<leapmotor-group-grid

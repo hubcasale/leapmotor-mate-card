@@ -35,8 +35,10 @@ export const GROUP_CATALOGUE: Record<GroupId, GroupDef> = {
     // street and nothing plugged in. `battery` stays as the
     // percentage-only option for whoever configured it.
     summaries: ['charge', 'battery', 'limit', 'phase', 'eta'],
-    panels: ['charging', 'schedule'],
-    keys: ['chargeLimit', 'isCharging', 'isPluggedIn', 'scheduleStart', 'scheduleEnd'],
+    // Mate publishes no charging schedule as entities (only a JSON text meant
+    // for automations), so there is no schedule panel here.
+    panels: ['charging'],
+    keys: ['chargeLimit', 'isCharging', 'isPluggedIn'],
   },
   status: {
     id: 'status',
@@ -56,7 +58,7 @@ export const GROUP_CATALOGUE: Record<GroupId, GroupDef> = {
     titleKey: 'group.climate',
     summaries: ['interior', 'target', 'state'],
     panels: ['climate', 'comfort'],
-    keys: ['interiorTemp', 'targetTemp', 'climateSwitch', 'driverSeatHeat', 'steeringWheelHeat'],
+    keys: ['interiorTemp', 'targetTemp', 'climateOn', 'driverSeatHeat', 'steeringWheelHeat'],
   },
   tires: {
     id: 'tires',
@@ -70,19 +72,10 @@ export const GROUP_CATALOGUE: Record<GroupId, GroupDef> = {
     id: 'trip',
     icon: 'mdi:road-variant',
     titleKey: 'group.trip',
-    // `recentDays` and not the `last7` it was called until the sub-view
-    // started drawing the days it actually covers: the sensor behind it is
-    // named for seven days and the API has been observed answering with
-    // eight. The rendered value was never a lie — it is a bare `217 km`,
-    // with no period in it — but the name is public configuration, and it
-    // named a window the card cannot promise. `last7` still works, see
-    // `SUMMARY_ALIASES`.
-    summaries: ['odometer', 'recentDays', 'consumption'],
+    summaries: ['odometer'],
     panels: ['trip'],
-    keys: [
-      'odometer', 'last7DaysKm', 'avgConsumption6w', 'totalEnergy',
-      'lastWeekDrivingPercent', 'lastWeekClimatePercent', 'lastWeekOtherPercent',
-    ],
+    // Mate keeps trips in its own database, not in MQTT: only the odometer is here.
+    keys: ['odometer'],
   },
   location: {
     id: 'location',
@@ -106,9 +99,7 @@ export const GROUP_CATALOGUE: Record<GroupId, GroupDef> = {
  * punishes them for having followed the documentation. The old name simply
  * keeps working; only the new one is documented.
  */
-const SUMMARY_ALIASES: Readonly<Record<string, string | undefined>> = {
-  last7: 'recentDays',
-}
+const SUMMARY_ALIASES: Readonly<Record<string, string | undefined>> = {}
 
 /** The default grid order. */
 export const GROUP_ORDER: readonly GroupId[] = [
@@ -326,16 +317,9 @@ function tiresSummary(group: ResolvedGroup, state: VehicleState, t: TranslateFn)
   }
 }
 
-function tripSummary(group: ResolvedGroup, state: VehicleState): string {
-  const { trip } = state
-  switch (group.summary) {
-    case 'recentDays':
-      return trip.last7DaysKm === undefined ? DASH : `${formatNumber(trip.last7DaysKm)} km`
-    case 'consumption':
-      return trip.avgConsumption === undefined ? DASH : `${formatNumber(trip.avgConsumption, 1)} kWh/100 km`
-    default:
-      return trip.odometerKm === undefined ? DASH : `${formatNumber(trip.odometerKm)} km`
-  }
+function tripSummary(_group: ResolvedGroup, state: VehicleState): string {
+  const km = state.trip.odometerKm
+  return km === undefined ? DASH : `${formatNumber(km)} km`
 }
 
 /**

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createTranslator, formatDuration, pickLanguage } from '../src/localize'
 import en from '../src/translations/en.json'
+import itCatalogue from '../src/translations/it.json'
 import pt from '../src/translations/pt.json'
 
 describe('pickLanguage', () => {
@@ -13,6 +14,10 @@ describe('pickLanguage', () => {
   it('reduces a regional tag to the base language', () => {
     expect(pickLanguage(undefined, 'pt-PT')).toBe('pt')
   })
+  it('picks Italian from Home Assistant, including a regional tag', () => {
+    expect(pickLanguage(undefined, 'it')).toBe('it')
+    expect(pickLanguage(undefined, 'it-IT')).toBe('it')
+  })
   it('falls back to English for a language without a catalog', () => {
     expect(pickLanguage(undefined, 'de')).toBe('en')
   })
@@ -22,6 +27,10 @@ describe('pickLanguage', () => {
 })
 
 describe('createTranslator', () => {
+  it('translates to Italian', () => {
+    expect(createTranslator('it')('openings.all_closed')).toBe('Tutto chiuso')
+    expect(createTranslator('it')('charging.title', { percent: 64 })).toBe('Carica al 64%')
+  })
   it('translates to Portuguese', () => {
     expect(createTranslator('pt')('openings.all_closed')).toBe('Tudo fechado')
   })
@@ -88,56 +97,34 @@ describe('translation catalogs', () => {
    * because that's what `createTranslator` returns when neither the primary
    * catalog nor the fallback one has it.
    */
-  it('pt and en have exactly the same keys', () => {
-    const ptKeys = new Set(flattenKeys(pt))
-    const enKeys = new Set(flattenKeys(en))
-    const missingInEn = [...ptKeys].filter(key => !enKeys.has(key)).sort()
-    const missingInPt = [...enKeys].filter(key => !ptKeys.has(key)).sort()
-    // The message NAMES the missing keys on each side. Whoever breaks parity
-    // needs to know which ones, not just that the counts don't match.
-    expect({ missingInEn, missingInPt }, [
-      `missing from en.json: ${missingInEn.join(', ') || '(none)'}`,
-      `missing from pt.json: ${missingInPt.join(', ') || '(none)'}`,
-    ].join('\n')).toEqual({ missingInEn: [], missingInPt: [] })
-  })
-
-  /*
-   * Neither label in the Trip sub-view that describes the cloud's short-term
-   * period may count its days. The two sensors behind it are named for seven
-   * and the API has been observed answering with eight, so the total is
-   * labeled as recent and the block below it is titled by what it is, with
-   * the period written from the data beside it.
-   *
-   * BOTH keys, because the first version of this guard covered only the
-   * heading and left the row three lines above it still reading "Last 7
-   * days" over eight bars that summed to the number next to it.
-   *
-   * And words as well as digits: `/\d/` alone would have waved through
-   * "Last seven days" and "Últimos sete dias", which say exactly the same
-   * wrong thing.
-   */
-  const COUNTED_IN_WORDS = new RegExp([
-    'one|two|three|four|five|six|seven|eight|nine|ten|week',
-    'um|uma|dois|duas|tr[êe]s|quatro|cinco|seis|sete|oito|nove|dez|semana',
-  ].join('|'), 'i')
-
-  it('the labels of the recent period name no number of days', () => {
-    for (const key of ['trip.recent_days', 'trip.heading_daily']) {
-      for (const [language, catalogue] of Object.entries({ en, pt })) {
-        const label = (catalogue as Record<string, string>)[key]
-        expect(label, `${key} in ${language}`).toBeDefined()
-        expect(label, `${key} in ${language}`).not.toMatch(/\d/)
-        expect(label, `${key} in ${language}`).not.toMatch(COUNTED_IN_WORDS)
-      }
+  it('en, pt and it have exactly the same keys', () => {
+    const enKeys = flattenKeys(en).sort()
+    for (const [name, catalogue] of Object.entries({ pt, it: itCatalogue })) {
+      const keys = new Set(flattenKeys(catalogue))
+      const missing = enKeys.filter(key => !keys.has(key))
+      const extra = [...keys].filter(key => !enKeys.includes(key)).sort()
+      // The message NAMES the keys on each side: whoever breaks parity
+      // needs to know which ones, not just that the counts differ.
+      expect({ missing, extra }, `${name}.json — missing: ${missing.join(', ') || '(none)'}; extra: ${extra.join(', ') || '(none)'}`)
+        .toEqual({ missing: [], extra: [] })
     }
   })
 
-  /*
-   * Two empty catalogs have the same keys — none — and would pass the test
-   * above without saying anything. This one closes that gap.
-   */
-  it('neither catalog is empty', () => {
-    expect(flattenKeys(pt).length).toBeGreaterThan(0)
-    expect(flattenKeys(en).length).toBe(flattenKeys(pt).length)
+  it('no catalogue is empty', () => {
+    expect(flattenKeys(en).length).toBeGreaterThan(50)
+  })
+
+  it('every key the source asks for exists in the English catalogue', () => {
+    // The source reads keys as literals (`t('group.climate')`) or builds the
+    // ones that follow a fixed pattern (`action.${id}`): both are covered
+    // here, so a renamed key cannot leave a dashboard printing the raw key.
+    const enKeys = new Set(flattenKeys(en))
+    const wanted = [
+      'group.charging', 'group.status', 'group.climate', 'group.tires', 'group.trip', 'group.location',
+      'action.quickVentilation', 'action.climateOff', 'action.driverSeatHeat', 'action.driverSeatVent',
+      'action.passengerSeatHeat', 'action.passengerSeatVent', 'climate.hint', 'trip.odometer', 'trip.outside_temp',
+      'error.not_found', 'error.unknown_device', 'error.ambiguous',
+    ]
+    expect(wanted.filter(key => !enKeys.has(key))).toEqual([])
   })
 })

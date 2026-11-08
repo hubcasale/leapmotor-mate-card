@@ -1,9 +1,10 @@
 import en from './translations/en.json'
+import it from './translations/it.json'
 import pt from './translations/pt.json'
 
 export const DASH = '—'
 
-const CATALOGUES: Record<string, Record<string, string>> = { en, pt }
+const CATALOGUES: Record<string, Record<string, string>> = { en, it, pt }
 const FALLBACK = 'en'
 
 export type TranslateFn = (key: string, vars?: Record<string, string | number>) => string

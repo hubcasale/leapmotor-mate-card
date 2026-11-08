@@ -16,15 +16,15 @@ import {
  *
  * The five that are left out are not usable as an actions-row button:
  * `steeringWheelHeat`, `mirrorHeat` and `batteryPreheat` live in the comfort
- * section, and `setChargeLimit` and `setClimate` need a value that only a
  * panel provides (see `PAYLOAD_ACTIONS` in `actions.ts`).
  */
 const OFFERED_IN_EDITOR: Record<ActionId, boolean> = {
   unlock: true, lock: true, trunk: true, windows: true, sunshade: true,
-  quickCool: true, quickHeat: true, defrost: true,
-  findVehicle: true, unlockCharger: true, refresh: true, climate: true,
-  steeringWheelHeat: false, mirrorHeat: false, batteryPreheat: false,
-  setChargeLimit: false, setClimate: false,
+  quickCool: true, quickHeat: true, quickVentilation: true, defrost: true,
+  findVehicle: true, unlockCharger: true, refresh: false, climate: true, climateOff: false,
+  steeringWheelHeat: false, mirrorHeat: false, batteryPreheat: true,
+  driverSeatHeat: false, driverSeatVent: false, passengerSeatHeat: false, passengerSeatVent: false,
+  setChargeLimit: false,
 }
 
 const ALL_ACTIONS: ActionId[] = (Object.keys(OFFERED_IN_EDITOR) as ActionId[])

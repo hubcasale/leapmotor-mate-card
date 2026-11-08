@@ -1,21 +1,13 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
 import {
-  BLOCKED_WHILE_DRIVING, CONTROL_PANEL, actionIcon, actionLabel, isActionAvailable,
+  BLOCKED_WHILE_DRIVING, actionIcon, actionLabel, isActionAvailable,
   type ActionEventDetail,
 } from '../actions'
 import { areDoorsUnknown, areWindowsUnknown, formatNumber, isWindowOpen } from '../format'
 import { DASH, type TranslateFn } from '../localize'
 import { sharedStyles } from '../theme'
 import type { ActionId, EntityMap, VehicleState } from '../types'
-
-/**
- * The position the sunshade sits at with the roof closed. It's the same 0
- * that `resolveAction` translates into `sunshade_close` and the minimum of
- * the sunshade panel's slider; it has a name so that the roof row and the
- * command can't disagree about what "closed" is.
- */
-const SUNSHADE_CLOSED_POSITION = 0
 
 interface Row {
   key: string
@@ -85,27 +77,11 @@ export class LeapmotorOpenings extends LitElement {
     return this.t(v ? openKey : closedKey)
   }
 
-  /**
-   * The value of the roof row: the state word and, only with the roof
-   * closed, the sunshade's position.
-   *
-   * The number appears in only one branch because it's only known in one
-   * branch. The sunshade's position isn't exposed as an entity (see the
-   * `case 'sunshade'` in `actions.ts`); what exists is the roof's binary
-   * state. With the roof closed the position is genuinely 0 — it's what
-   * `sunshade_close` leaves there — and saying so puts the row speaking the
-   * same vocabulary as the control it opens, which is a position from 0 to
-   * 10. With the roof open the position could be anywhere from 1 to 10 and
-   * none of them is known: writing a number there would be inventing it.
-   * With no reading at all it's DASH, like on any other row.
-   *
-   * The 0 goes through `formatNumber` and isn't written by hand: it's a
-   * value, and this section's values are all formatted through the same
-   * place.
-   */
+  /** The roof row: the state word and, when Mate reports it, how far the sunshade is open. */
   private roofValue(roof: boolean | undefined): string {
     const word = this.boolValue(roof, 'openings.open', 'openings.closed')
-    return roof === false ? `${word} · ${formatNumber(SUNSHADE_CLOSED_POSITION)}` : word
+    const pct = this.state.openings.sunshadePct
+    return roof === true && pct !== undefined ? `${word} · ${formatNumber(pct)} %` : word
   }
 
   private rows(): Row[] {
@@ -177,14 +153,7 @@ export class LeapmotorOpenings extends LitElement {
         label: this.t('openings.roof'),
         value: this.roofValue(o.roof),
         warn: o.roof === true,
-        // The sunshade is commanded by an absolute position (0–10) and
-        // `resolveAction` doesn't even look at this reading, unlike the
-        // trunk, whose command is chosen from the read state. That's why the
-        // row keeps commanding even with the roof at DASH: it's the card
-        // that doesn't know the state, and the command doesn't need to know
-        // it — the rule against offering a useless control doesn't apply to
-        // a control that works. The value still says DASH, which is what
-        // asserts nothing. The button opens the position panel; see `fire`.
+        // Mate has an open and a close button: the tap picks the one that reverses the reading.
         action: 'sunshade',
       },
     ]
@@ -197,17 +166,6 @@ export class LeapmotorOpenings extends LitElement {
   }
 
   private fire(action: ActionId) {
-    // An action with a panel doesn't call a service from here: `resolveAction`
-    // requires from it a value that only its panel chooses (the sunshade, a
-    // position). The rule and the map are the same ones from the actions
-    // row — on purpose, so the two can't diverge on the same action.
-    const panel = CONTROL_PANEL[action]
-    if (panel) {
-      this.dispatchEvent(new CustomEvent('leapmotor-expand', {
-        detail: { panel }, bubbles: true, composed: true,
-      }))
-      return
-    }
     this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-action', {
       detail: { action }, bubbles: true, composed: true,
     }))

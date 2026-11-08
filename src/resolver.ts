@@ -1,83 +1,93 @@
-import type { EntityRegistryEntry, HassEntityDisplayEntry, HomeAssistant } from './ha-types'
-import { ENTITY_KEYS, INTEGRATION_DOMAIN, type LogicalKey } from './keys'
+import type { HomeAssistant } from './ha-types'
+import { ENTITY_KEYS, MATE_PREFIX, type EntityDef, type LogicalKey } from './keys'
 import type { EntityMap, LeapmotorCardConfig } from './types'
 
 export type ResolveError = 'not_found' | 'ambiguous' | 'unknown_device'
 
 export interface ResolveResult {
+  /** The car's id: the last six characters of its VIN, lowercase — the middle of `leapmotor_mate_<id>_…`. */
   deviceId?: string
   deviceName?: string
   map: EntityMap
+  /** Logical names Mate does publish but that were not found for this car. */
   missing: LogicalKey[]
   error?: ResolveError
   candidates: { id: string; name: string }[]
-  needsFallback: boolean
 }
 
-function domainOf(entityId: string): string {
-  return entityId.split('.')[0] ?? ''
+/**
+ * Leapmotor Mate publishes its entities through MQTT discovery, in English,
+ * under a device named `Leapmotor Mate <last six of the VIN>`. Home Assistant
+ * builds every entity_id from that device name and the entity's name, so the
+ * id is always `<domain>.leapmotor_mate_<id>_<slug>` — independent of the
+ * language of Home Assistant or of Mate. That is the one thing this resolver
+ * reads: it needs no entity registry, so it also works for users who are not
+ * administrators.
+ */
+const ENTITY_ID = new RegExp(`^([a-z_]+)\\.${MATE_PREFIX}([a-z0-9]+)_(.+)$`)
+
+interface Found { domain: string; slug: string; entityId: string }
+
+function carsIn(hass: HomeAssistant): Map<string, Found[]> {
+  const cars = new Map<string, Found[]>()
+  for (const entityId of Object.keys(hass.states)) {
+    const m = ENTITY_ID.exec(entityId)
+    if (!m) continue
+    const [, domain, id, slug] = m as unknown as [string, string, string, string]
+    const list = cars.get(id) ?? []
+    list.push({ domain, slug, entityId })
+    cars.set(id, list)
+  }
+  return cars
 }
 
-export async function loadRegistryFallback(hass: HomeAssistant): Promise<HassEntityDisplayEntry[]> {
-  const all = await hass.callWS<EntityRegistryEntry[]>({ type: 'config/entity_registry/list' })
-  return all
-    .filter(e => e.platform === INTEGRATION_DOMAIN)
-    .map(e => ({
-      entity_id: e.entity_id,
-      device_id: e.device_id,
-      platform: e.platform,
-      translation_key: e.translation_key ?? undefined,
-    }))
+function nameOf(hass: HomeAssistant, id: string, found: Found[]): string {
+  const deviceId = hass.entities?.[found[0]!.entityId]?.device_id
+  const device = deviceId ? hass.devices?.[deviceId] : undefined
+  return device?.name_by_user || device?.name || `Leapmotor ${id.toUpperCase()}`
 }
 
-export function resolveEntities(
-  hass: HomeAssistant,
-  config: LeapmotorCardConfig,
-  extra?: HassEntityDisplayEntry[],
-): ResolveResult {
-  const fromHass = Object.values(hass.entities ?? {}).filter(e => e.platform === INTEGRATION_DOMAIN)
-  const entries = fromHass.length > 0 ? fromHass : (extra ?? [])
-  const needsFallback = fromHass.length === 0 && !extra
+/** `wanted` may be the id (`5r1234`), the whole prefix, a device id of Home Assistant, or any entity of the car. */
+function pickCar(hass: HomeAssistant, cars: Map<string, Found[]>, wanted: string): string | undefined {
+  const w = wanted.toLowerCase()
+  if (cars.has(w)) return w
+  const prefixed = w.startsWith(MATE_PREFIX) ? w.slice(MATE_PREFIX.length) : undefined
+  if (prefixed && cars.has(prefixed)) return prefixed
+  const m = ENTITY_ID.exec(w)
+  if (m && cars.has(m[2]!)) return m[2]
+  for (const [id, found] of cars) {
+    if (hass.entities?.[found[0]!.entityId]?.device_id === wanted) return id
+  }
+  return undefined
+}
 
-  const deviceIds = [...new Set(entries.map(e => e.device_id).filter((d): d is string => !!d))]
-  const candidates = deviceIds.map(id => ({
-    id,
-    name: hass.devices?.[id]?.name_by_user || hass.devices?.[id]?.name || id,
-  }))
+export function resolveEntities(hass: HomeAssistant, config: LeapmotorCardConfig): ResolveResult {
+  const cars = carsIn(hass)
+  const candidates = [...cars].map(([id, found]) => ({ id, name: nameOf(hass, id, found) }))
+  const empty = (error: ResolveError): ResolveResult =>
+    ({ map: {}, missing: [], error, candidates })
 
-  const empty = (error?: ResolveError): ResolveResult =>
-    ({ map: {}, missing: Object.keys(ENTITY_KEYS) as LogicalKey[], error, candidates, needsFallback })
+  if (cars.size === 0) return empty('not_found')
 
-  if (entries.length === 0) return empty(needsFallback ? undefined : 'not_found')
-
-  let deviceId: string | undefined
-  const wanted = config.device
-  if (wanted) {
-    if (wanted.includes('.')) {
-      deviceId = entries.find(e => e.entity_id === wanted)?.device_id ?? undefined
-    } else if (deviceIds.includes(wanted)) {
-      deviceId = wanted
-    }
-    if (!deviceId) return empty('unknown_device')
-  } else if (deviceIds.length === 1) {
-    deviceId = deviceIds[0]
-  } else if (deviceIds.length === 0) {
-    return empty('not_found')
+  let id: string | undefined
+  if (config.device) {
+    id = pickCar(hass, cars, config.device)
+    if (!id) return empty('unknown_device')
+  } else if (cars.size === 1) {
+    id = [...cars.keys()][0]
   } else {
     return empty('ambiguous')
   }
 
-  const byKey = new Map<string, string>()
-  for (const e of entries) {
-    if (e.device_id !== deviceId || !e.translation_key) continue
-    byKey.set(`${domainOf(e.entity_id)}/${e.translation_key}`, e.entity_id)
-  }
+  const found = cars.get(id!)!
+  const byDomainSlug = new Map(found.map(f => [`${f.domain}/${f.slug}`, f.entityId]))
 
   const map: EntityMap = {}
   const missing: LogicalKey[] = []
-  for (const [key, def] of Object.entries(ENTITY_KEYS) as [LogicalKey, { domain: string; tk: string }][]) {
-    const found = byKey.get(`${def.domain}/${def.tk}`)
-    if (found) map[key] = found
+  for (const [key, def] of Object.entries(ENTITY_KEYS) as [LogicalKey, EntityDef][]) {
+    if (def.slug === null) continue
+    const entityId = byDomainSlug.get(`${def.domain}/${def.slug}`)
+    if (entityId) map[key] = entityId
     else missing.push(key)
   }
 
@@ -88,13 +98,5 @@ export function resolveEntities(
     if (i >= 0) missing.splice(i, 1)
   }
 
-  const device = hass.devices?.[deviceId]
-  return {
-    deviceId,
-    deviceName: device?.name_by_user || device?.name || undefined,
-    map,
-    missing,
-    candidates,
-    needsFallback: false,
-  }
+  return { deviceId: id, deviceName: nameOf(hass, id!, found), map, missing, candidates }
 }

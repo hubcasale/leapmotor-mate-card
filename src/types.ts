@@ -28,10 +28,11 @@ export type GridEntry = GroupId | {
 
 export type ActionId =
   | 'unlock' | 'lock' | 'trunk' | 'windows' | 'sunshade'
-  | 'quickCool' | 'quickHeat' | 'defrost'
+  | 'quickCool' | 'quickHeat' | 'quickVentilation' | 'defrost'
   | 'findVehicle' | 'unlockCharger' | 'refresh'
-  | 'climate' | 'steeringWheelHeat' | 'mirrorHeat' | 'batteryPreheat'
-  | 'setChargeLimit' | 'setClimate'
+  | 'climate' | 'climateOff' | 'steeringWheelHeat' | 'mirrorHeat' | 'batteryPreheat'
+  | 'driverSeatHeat' | 'driverSeatVent' | 'passengerSeatHeat' | 'passengerSeatVent'
+  | 'setChargeLimit'
 
 export interface LeapmotorCardConfig {
   type: string
@@ -56,200 +57,6 @@ export interface LeapmotorCardConfig {
 
 export type ChargingPhase = 'unplugged' | 'plugged' | 'charging' | 'complete' | 'scheduled'
 export type Activity = 'parked' | 'driving' | 'ready' | 'unknown'
-
-/**
- * A week's reported consumption, with the period it covers. The dates stay
- * as the day strings the API sends (`2026-08-24`) and not as `Date`: it is
- * the section that writes them, which already knows the language, and
- * converting here would force picking a timezone — these dates are calendar
- * days, with no time of day.
- *
- * **The period is mandatory; the consumption is not.** That is the opposite
- * of what intuition suggests, and it is on purpose: a week without a period
- * cannot be labeled and does not even exist as a row — that was, once
- * again, a number the card shows without being able to explain it, which is
- * the problem this version came to fix. A week with a period and no
- * consumption, on the other hand, has everything it needs to be an honest
- * row: the dates say which week it is, and the dash says the car did not
- * drive during it.
- */
-export interface WeeklyConsumption {
-  kwhPer100Km?: number
-  start: string
-  end: string
-}
-
-/**
- * One day of the per-day breakdown the cloud API sends alongside the
- * seven-day totals. `date` is the calendar day exactly as the API writes it
- * (`2026-09-04`), for the same reason `WeeklyConsumption` keeps its dates as
- * strings: they carry no time of day, and turning them into a `Date` here
- * would force this layer to pick a timezone.
- *
- * **The day is mandatory; the distance is not.** A row nobody can date is
- * a bar with no name, and it does not become a row at all. A dated row with
- * no distance is still an honest row: the day is named, and what is not
- * known is written as such.
- *
- * A zero is NOT an absence here, unlike in `WeeklyConsumption`: a day at
- * 0 km is a day the car did not move, which is a fact worth showing, where a
- * week at 0.0 kWh/100 km would have been an efficiency the car never had.
- *
- * **The energy is here only when the integration said what the number is.**
- * `daily_detail` has always carried a per-day figure and 0.4.10 dropped it,
- * because nothing in the payload named the quantity. Naming it takes two
- * declarations and the integration now makes both: v0.7.2 added an
- * `energy_scope`, saying what the figure is presumed to count, and v0.7.3 an
- * `energy_unit`, saying what it is measured in — `kWh` on a B10, and `null`
- * on a T03 whose magnitudes contradict that contract, until v0.7.4 converted
- * the T03's watt-hours and declared `kWh` for it too. `parseDailyDetail` in
- * `vehicle-state.ts` reads the figure back in only behind both: a scope this
- * card cannot name, or a unit it cannot name, and the field never reaches
- * this structure, so nothing downstream can print it.
- *
- * The unit the figure came under stays on `DailyBreakdown` and not here, as
- * does what it counts: both qualify every row equally, and the row carries
- * only what varies from day to day.
- */
-export interface TripDay {
-  date: string
-  distanceKm?: number
-  energyKwh?: number
-}
-
-/**
- * What a per-day energy counts, in the card's OWN vocabulary and not the
- * API's. The mapping from the integration's strings lives in
- * `vehicle-state.ts`, and that indirection is the point: a value nobody
- * mapped cannot be spelled as a member of this type, so it cannot reach a
- * section, so it cannot be labeled with a claim nobody has checked.
- *
- * One member today. `driving` is the integration's `presumed_driving_only`:
- * the reading that the figure is traction energy alone, climate and
- * accessories excluded. **It is a hypothesis, not a finding**, and this name
- * is what the card was TOLD, not what the card knows — which is why nothing
- * here may be labeled without the hedge `DailyEnergy.confirmed` carries. The
- * evidence is set out at `parseDailyDetail` in `vehicle-state.ts`: two aligned
- * weeks show the rows agreeing with another attribute of the same integration
- * to within the cloud's own rounding, which is internal consistency and not a
- * measurement of what the number counts, and upstream declines to confirm the
- * reading from its own captures.
- */
-export type EnergyScope = 'driving'
-
-/**
- * The unit a per-day energy is measured in, again in the card's own
- * vocabulary: a symbol this card is prepared to print beside a number, and
- * nothing else can be spelled as a member of this type.
- *
- * One member, and it is also the symbol as rendered — which is the point of
- * keeping it here rather than hard-coding `kWh` in the section. Integration
- * v0.7.3 publishes `energy_unit` per sensor and per row: `kWh` on a B10, and
- * `null` on a T03, where the cloud's magnitudes contradict the kWh contract
- * and upstream refuses to guess a factor of a thousand. A unit upstream
- * marks unverified is as unlabelable as an unknown scope, so it is refused
- * in the same place and the same way. v0.7.4 settled the T03 on watt-hours
- * from an aligned day (#67), converts them, and declares `kWh` on both cars;
- * what the cloud sent is in `energy_source_unit`, which the card does not
- * need, because the figure it prints is the converted one.
- */
-export type EnergyUnit = 'kWh'
-
-/**
- * Why the integration says it published no usable per-day energy, in the
- * card's own vocabulary. `unverified_unit` is the T03 case above, on v0.7.3;
- * `incomplete_data` is a period whose readings did not all arrive.
- *
- * It is a REASON and never a permission: nothing here can put a figure back
- * on screen, and the absence of a reason is not an assurance either — every
- * integration older than v0.7.3 declares none at all.
- */
-export type EnergyUnavailableReason = 'unverified_unit' | 'incomplete_data'
-
-/**
- * The qualification the per-day energy is shown under: what it counts, what
- * it is measured in, and whether the first of those has been established or
- * merely inferred.
- *
- * `unit` is here rather than on each `TripDay` because the section prints one
- * symbol for the whole column, and because a row whose own `energy_unit`
- * disagreed with this one never got an `energyKwh` in the first place — see
- * `parseDailyDetail`. No figure is ever drawn under a unit that did not come
- * with it.
- *
- * `confirmed` is the integration's `energy_scope_confirmed`, carried as the
- * flag it is instead of being resolved into wording here, so that the day it
- * turns true the label drops its hedge with no string edited anywhere. As of
- * integration v0.7.3 it is false: its maintainer states he cannot yet confirm
- * the driving-only reading from his own captures.
- */
-export interface DailyEnergy {
-  scope: EnergyScope
-  unit: EnergyUnit
-  confirmed: boolean
-}
-
-/**
- * The per-day breakdown as a whole, present only when the integration
- * publishes it (it arrived in the integration's v0.7.0; before that the
- * seven-day sensors threw the daily rows away).
- *
- * `start` and `end` are the FIRST and LAST day actually in `days`, and not a
- * period asserted by anyone: the API named these sensors for seven days and
- * has been observed returning eight, so the only period the card can honestly
- * name is the one it is holding. They are stored, rather than left for the
- * section to pick off the ends of the array, so that the guarantee that
- * `days` is sorted lives on this side of the boundary.
- */
-export interface DailyBreakdown {
-  /** Ascending, oldest day first. Never empty. */
-  days: TripDay[]
-  start: string
-  end: string
-  /**
-   * Present only when the sensor holding the rows declared BOTH a scope and a
-   * unit this card knows, AND at least one of those rows came with a figure
-   * under that same unit — a qualifier over a column with no kilowatt-hours
-   * in it would be an orphan sentence. When it is present, and only then, the
-   * days carry an `energyKwh`.
-   *
-   * Undefined is every integration up to and including v0.7.2, which names no
-   * unit; a T03 on v0.7.3, whose unit is `null` (v0.7.4 declares `kWh`);
-   * and equally a later one that ships a scope or a unit this card has never
-   * heard of. An unlabeled energy
-   * is precisely what 0.4.10 took off the screen, and it does not come back by
-   * default.
-   */
-  energy?: DailyEnergy
-  /**
-   * What the integration said about the energy it did not publish, when it
-   * said anything — and only when `energy` is absent, since a stated reason
-   * for withholding a column that is on screen would contradict the screen.
-   *
-   * Undefined on every integration older than v0.7.3, which declares no
-   * reason: silence here is the normal case and says nothing at all.
-   */
-  energyUnavailable?: EnergyUnavailableReason
-}
-
-/** A slice of the week's energy: the kWh and the percentage it is worth. */
-export interface EnergySlice {
-  kwh?: number
-  percent?: number
-}
-
-/**
- * The last week's energy split apart. The total is the sum of the slices
- * that are present, and stays `undefined` — not zero — when none of them
- * came through: a zero would assert a week with no consumption at all,
- * which is not what the absence of a reading says.
- */
-export interface WeekEnergy {
-  driving: EnergySlice
-  climate: EnergySlice
-  other: EnergySlice
-  totalKwh?: number
-}
 
 export interface VehicleState {
   online: boolean
@@ -286,31 +93,13 @@ export interface VehicleState {
     windows: Record<'fl' | 'fr' | 'rl' | 'rr', { open?: boolean; position?: number }>
     trunk?: boolean
     roof?: boolean
+    /** How far the sunshade is open, in percent, when the car says. */
+    sunshadePct?: number
     openCount: number
   }
-  climate: { on?: boolean; interiorC?: number; targetC?: number; mode?: string; recirculating?: boolean }
+  climate: { on?: boolean; interiorC?: number; outsideC?: number; targetC?: number; mode?: string; recirculating?: boolean; fan?: number }
   tires: Record<'fl' | 'fr' | 'rl' | 'rr', number | undefined>
-  trip: {
-    odometerKm?: number
-    last7DaysKm?: number
-    avgConsumption?: number
-    totalEnergyKwh?: number
-    lifetimeConsumption?: number
-    /**
-     * The weekly series of the `weekly_consumption` attribute, in the order
-     * the API sends it: from the oldest week to the most recent. Empty when
-     * there is no series at all that can be read.
-     */
-    weeklyConsumption: WeeklyConsumption[]
-    weekEnergy: WeekEnergy
-    /**
-     * The per-day breakdown, or `undefined` on any integration that does not
-     * publish one. Undefined and not an empty structure: the section's rule
-     * for this block is all or nothing, and an empty frame would announce a
-     * feature the car cannot feed.
-     */
-    dailyBreakdown?: DailyBreakdown
-  }
+  trip: { odometerKm?: number }
   comfort: {
     driverSeatHeat?: number; driverSeatVent?: number
     passengerSeatHeat?: number; passengerSeatVent?: number

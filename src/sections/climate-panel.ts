@@ -1,8 +1,8 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
 import {
-  TARGET_TEMP_DECIMALS, actionLabel, nextStepTemperature, shownLevel,
-  type ActionEventDetail, type ActionPayload, type ClimateChange, type SeatLevels,
+  actionLabel, shownLevel,
+  type ActionEventDetail, type ActionPayload, type SeatLevels,
 } from '../actions'
 import { CABIN_TOPVIEW } from '../cabin-topview'
 import { formatNumber } from '../format'
@@ -11,8 +11,6 @@ import type { TranslateFn } from '../localize'
 import { sharedStyles } from '../theme'
 import type { ActionId, EntityMap, VehicleState } from '../types'
 
-const FAN_MIN = 1
-const FAN_MAX = 7
 
 /**
  * The spot of a control overlaid on the cabin view. `left`/`top` are
@@ -29,39 +27,11 @@ export class LeapmotorClimatePanel extends LitElement {
   /** Maximum seat level, read from the `max` attribute of the number entities. */
   @property({ type: Number }) maxLevel = 3
   /**
-   * The integration doesn't expose the fan speed, so this value lives in the
-   * card (which survives the panel collapsing) and not here: a local
-   * `@internalState` would go back to 3 every time the user closed and
-   * reopened the panel, and the next tap on the stepper would send that 3 to
-   * the car without telling them.
-   */
-  @property({ attribute: false }) fanSpeed = 3
-
-  /**
-   * Temperature and recirculation requested and not yet confirmed by the
-   * car. They come from the card, which survives the panel collapsing:
-   * storing them here would mean closing and reopening the tile erased
-   * them, and the next command would fall back to the old reading and undo
-   * the user's request — the `fanSpeed` lesson, applied here too now.
-   */
-  @property({ attribute: false }) pendingTemp?: number
-  @property({ attribute: false }) pendingRecirc?: boolean
-
-  /**
    * The levels the panel shows: already reconciled by the card, which is
    * what stores the requests (`SeatRequests`). They are numbers, not
    * requests — hence the distinct name.
    */
   @property({ attribute: false }) shownLevels: SeatLevels = {}
-
-  private get shownTemp(): number | undefined {
-    return this.pendingTemp ?? this.state.climate.targetC
-  }
-
-  /** `undefined` is "don't know", and is shown as such — not as "off". */
-  private get shownRecirc(): boolean | undefined {
-    return this.pendingRecirc ?? this.state.climate.recirculating
-  }
 
   private fire(action: ActionId, payload?: ActionPayload) {
     this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-action', {
@@ -75,45 +45,17 @@ export class LeapmotorClimatePanel extends LitElement {
     }))
   }
 
-  /**
-   * Only the fields this control changed, and in its own event: a partial
-   * change is not a command, and so has no way to reach `resolveAction` —
-   * which only knows how to work with complete commands. This is the same
-   * pattern as `leapmotor-fan-speed` and `leapmotor-set-number`. The card is
-   * what accumulates the changes and composes the command.
-   */
-  private sendClimate(change: ClimateChange) {
-    this.dispatchEvent(new CustomEvent<ClimateChange>('leapmotor-climate-change', {
-      detail: change, bubbles: true, composed: true,
-    }))
-  }
-
-  private step(delta: number) {
-    const next = nextStepTemperature(this.shownTemp, delta)
-    // Debounce grouping doesn't live here: the card destroys this panel when
-    // the tile collapses, which would cancel a still-pending send without
-    // any warning (spec v2, finding 3). `leapmotor-card.ts`, which survives
-    // the panel, is what groups the taps and sends only one command.
-    this.sendClimate({ temperature: next })
-  }
-
-  /**
-   * With no reading there's no opposite: with an unknown state, the tap
-   * requests recirculation ON — an explicit choice by the user — instead of
-   * pretending it was off and "flipping" from there.
-   */
+  /** Mate takes the recirculation as a plain on/off switch. */
   private toggleRecirc() {
-    const shown = this.shownRecirc
-    const next = shown === undefined ? true : !shown
-    this.sendClimate({ recirculate: next })
+    const shown = this.state.climate.recirculating
+    this.dispatchEvent(new CustomEvent<{ key: LogicalKey; on: boolean }>('leapmotor-set-switch', {
+      detail: { key: 'recirculation', on: shown === undefined ? true : !shown }, bubbles: true, composed: true,
+    }))
   }
 
-  /** The chosen speed only reaches the car on the next `set_climate`. */
+  /** The fan is a number entity: the speed goes out when the slider is released. */
   private onFan(e: Event) {
-    const value = Number((e.target as HTMLInputElement).value)
-    this.dispatchEvent(new CustomEvent<{ value: number }>('leapmotor-fan-speed', {
-      detail: { value }, bubbles: true, composed: true,
-    }))
+    this.setNumber('fanLevel', Number((e.target as HTMLInputElement).value))
   }
 
   /** A switch overlaid on the view, in a chip all its own: mirrors, steering wheel. */
@@ -151,28 +93,26 @@ export class LeapmotorClimatePanel extends LitElement {
     >${halves.map(half => this.seatLevel(half.key, half.icon, half.label))}</div>`
   }
 
-  /** Half a pill: each tap cycles the level 0 → max → 0. */
+  /**
+   * Half a pill. Mate commands a seat with an on and an off button and
+   * reports a level in a sensor, so a tap is a toggle: the level is shown,
+   * but it cannot be chosen. The request is kept by the card, which marks it
+   * pending until the car's reading moves.
+   */
   private seatLevel(key: SeatLevelKey, icon: string, label: string) {
-    // The cycle target comes from the shown value, which already includes
-    // the unconfirmed request: two taps in a row advance two levels instead
-    // of sending the same one twice, while Home Assistant hasn't written the
-    // new state yet. `shownLevel` is shared with the comfort section, which
-    // shows the same four levels and can't answer something different on
-    // the same screen.
     const { level, pending } = shownLevel(this.shownLevels[key], this.state.comfort[key])
     // `formatNumber` already returns DASH for `undefined`.
     const shown = formatNumber(level, 0)
-    const next = ((level ?? 0) + 1) % (this.maxLevel + 1)
     // The level goes in the label because `aria-label` covers the button's
     // content: without it, a screen reader would announce the seat without
-    // saying what level it's at. No `aria-pressed`: this cycles through
-    // several levels, it's not a toggle.
+    // saying what level it's at.
     const spoken = `${label} · ${shown}`
     return html`<button
       class="plain seat-btn ${level ? 'on' : ''} ${pending ? 'pending' : ''}"
-      @click=${() => this.setNumber(key, next)}
+      @click=${() => this.dispatchEvent(new CustomEvent('leapmotor-seat', { detail: { key }, bubbles: true, composed: true }))}
       title=${spoken}
       aria-label=${spoken}
+      aria-pressed=${level === undefined ? nothing : (level > 0 ? 'true' : 'false')}
     >
       <ha-icon icon=${icon}></ha-icon>
       <span class="level">${shown}</span>
@@ -261,26 +201,13 @@ export class LeapmotorClimatePanel extends LitElement {
   }
 
   override render() {
-    const temp = this.shownTemp
-    const pending = this.pendingTemp !== undefined
-    const recirc = this.shownRecirc
-    const recircPending = this.pendingRecirc !== undefined
-    // `set_climate` turns on climate control as a side effect of the
-    // command; touching recirculation with the A/C off would turn it on
-    // without the user asking for it.
-    const climateOn = this.state.climate.on === true
-    // Of the four buttons in the bottom row, only this one is a toggle, and
-    // the fixed label it used to have ("A/C switch") didn't say which way it
-    // went: the state could only be read from the highlight, and anyone
-    // wanting to turn off climate control had no way to know it was there.
-    // That's why it comes from `actionLabel`, which is what decides this for
-    // the trunk and the windows — so the label and the called service can't
-    // disagree.
+    const c = this.state.climate
+    const climateOn = c.on === true
+    const recirc = c.recirculating
+    // The toggle's label says what the tap does (turn off while it runs).
     const acLabel = actionLabel('climate', this.state, this.t)
     const recircLabel = this.t('climate.recirculation')
-    const recircTitle = !climateOn
-      ? this.t('climate.recirculation_off_hint')
-      : recirc === undefined ? this.t('climate.recirculation_unknown') : recircLabel
+    const fan = c.fan
 
     return html`<div class="panel">
       <div class="title">${this.t('climate.title')}</div>
@@ -288,50 +215,45 @@ export class LeapmotorClimatePanel extends LitElement {
       ${this.topview()}
 
       <div class="stepper">
-        <button class="plain step-btn" @click=${() => this.step(-1)} title=${this.t('climate.cooler')} aria-label=${this.t('climate.cooler')}>
-          <ha-icon icon="mdi:minus"></ha-icon>
-        </button>
-        <div class="value ${pending ? 'pending' : ''}">
-          <span class="big">${formatNumber(temp, TARGET_TEMP_DECIMALS)}</span><span class="unit muted">°C</span>
+        <div class="value">
+          <span class="big">${formatNumber(c.targetC, 0)}</span><span class="unit muted">°C</span>
         </div>
-        <button class="plain step-btn" @click=${() => this.step(1)} title=${this.t('climate.warmer')} aria-label=${this.t('climate.warmer')}>
-          <ha-icon icon="mdi:plus"></ha-icon>
-        </button>
       </div>
       <div class="hint muted">${this.t('climate.hint')}</div>
 
-      <div class="line">
-        <span class="muted"><ha-icon icon="mdi:fan"></ha-icon> ${this.t('climate.fan')}</span>
-        <span class="reading">${formatNumber(this.fanSpeed, 0)}</span>
-      </div>
-      <input
-        class="slider" type="range" min=${FAN_MIN} max=${FAN_MAX} step="1"
-        aria-label=${this.t('climate.fan')}
-        .value=${String(this.fanSpeed)}
-        @input=${this.onFan}
-      />
-      <div class="hint muted">${this.t('climate.fan_note')}</div>
+      ${this.map.fanLevel ? html`
+        <div class="line">
+          <span class="muted"><ha-icon icon="mdi:fan"></ha-icon> ${this.t('climate.fan')}</span>
+          <span class="reading">${formatNumber(fan, 0)}</span>
+        </div>
+        <input
+          class="slider" type="range" min="1" max="7" step="1"
+          aria-label=${this.t('climate.fan')}
+          .value=${String(fan ?? 1)}
+          @change=${this.onFan}
+        />` : nothing}
 
-      <div class="line">
-        <span class="muted"><ha-icon icon="mdi:air-filter"></ha-icon> ${recircLabel}</span>
-        <button
-          class="plain toggle ${recirc ? 'on' : ''} ${recircPending ? 'pending' : ''}"
-          ?disabled=${!climateOn}
-          title=${recircTitle}
-          aria-label=${recircTitle}
-          aria-pressed=${recirc === undefined ? nothing : (recirc ? 'true' : 'false')}
-          @click=${this.toggleRecirc}
-        >
-          <ha-icon icon=${recirc === undefined
-            ? 'mdi:help-circle-outline'
-            : recirc ? 'mdi:toggle-switch' : 'mdi:toggle-switch-off-outline'}></ha-icon>
-        </button>
-      </div>
+      ${this.map.recirculation ? html`
+        <div class="line">
+          <span class="muted"><ha-icon icon="mdi:air-filter"></ha-icon> ${recircLabel}</span>
+          <button
+            class="plain toggle ${recirc ? 'on' : ''}"
+            title=${recircLabel}
+            aria-label=${recircLabel}
+            aria-pressed=${recirc === undefined ? nothing : (recirc ? 'true' : 'false')}
+            @click=${this.toggleRecirc}
+          >
+            <ha-icon icon=${recirc === undefined
+              ? 'mdi:help-circle-outline'
+              : recirc ? 'mdi:toggle-switch' : 'mdi:toggle-switch-off-outline'}></ha-icon>
+          </button>
+        </div>` : nothing}
 
       <div class="grid">
-        ${this.button('climate', 'climateSwitch', 'mdi:air-conditioner', acLabel, climateOn)}
+        ${this.button('climate', climateOn ? 'climateOff' : 'climateAuto', 'mdi:air-conditioner', acLabel, climateOn)}
         ${this.button('quickCool', 'quickCool', 'mdi:snowflake', this.t('action.quickCool'))}
         ${this.button('quickHeat', 'quickHeat', 'mdi:fire', this.t('action.quickHeat'))}
+        ${this.button('quickVentilation', 'quickVentilation', 'mdi:fan', this.t('action.quickVentilation'))}
         ${this.button('defrost', 'windshieldDefrost', 'mdi:car-defrost-front', this.t('action.defrost'))}
       </div>
     </div>`

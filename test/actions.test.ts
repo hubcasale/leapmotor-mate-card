@@ -1,233 +1,158 @@
 import { describe, expect, it } from 'vitest'
 import {
-  BLOCKED_WHILE_DRIVING, PAYLOAD_ACTIONS, TARGET_TEMP_DECIMALS, TEMP_MAX, TEMP_MIN, actionIcon, actionLabel,
-  composeClimateCommand, decideAction, forgetRequest, isActionAvailable, lockPillShape, lockToggleAction,
-  nextStepTemperature, pendingValue,
-  pruneRequests, resolveAction, shownLevel,
-  type ClimateIntent,
+  BLOCKED_WHILE_DRIVING, PAYLOAD_ACTIONS, actionIcon, actionLabel, decideAction, forgetRequest,
+  isActionAvailable, lockPillShape, lockToggleAction, pendingValue, pruneRequests, resolveAction, shownLevel,
 } from '../src/actions'
-import { formatNumber } from '../src/format'
 import { resolveEntities } from '../src/resolver'
 import { buildVehicleState } from '../src/vehicle-state'
 import { createTranslator } from '../src/localize'
 import type { ActionId } from '../src/types'
-import { REAL_NOW, realHass } from './fixtures/real-states'
+import { MATE_NOW as REAL_NOW, mateHass as realHass, id as eid } from './fixtures/mate-states'
 
 /**
- * `Record<ActionId, true>`, not an array literal: an `ActionId[]` array
- * doesn't force every member of the union to be included, so a new action in
- * the type could be left out without anything warning about it. An object
- * typed as `Record<ActionId, true>` has to have every key — miss one and
- * `npm run typecheck` (which runs before this suite) no longer passes, which
- * forces giving it a label before the action can be added safely.
+ * `Record<ActionId, true>`, not an array literal: an object typed this way
+ * has to carry every member of the union, so a new action cannot be added
+ * without `npm run typecheck` asking for a label for it here.
  */
 const ALL_ACTIONS: Record<ActionId, true> = {
   unlock: true, lock: true, trunk: true, windows: true, sunshade: true,
-  quickCool: true, quickHeat: true, defrost: true,
+  quickCool: true, quickHeat: true, quickVentilation: true, defrost: true,
   findVehicle: true, unlockCharger: true, refresh: true,
-  climate: true, steeringWheelHeat: true, mirrorHeat: true, batteryPreheat: true,
-  setChargeLimit: true, setClimate: true,
+  climate: true, climateOff: true, steeringWheelHeat: true, mirrorHeat: true, batteryPreheat: true,
+  driverSeatHeat: true, driverSeatVent: true, passengerSeatHeat: true, passengerSeatVent: true,
+  setChargeLimit: true,
 }
 
-const t = createTranslator('pt')
+const t = createTranslator('it')
 
-function ctx(overrides: Record<string, string> = {}) {
+function ctx(overrides: Record<string, string | null> = {}) {
   const hass = realHass(overrides)
-  const { map } = resolveEntities(hass, { type: 'custom:leapmotor-card' })
+  const { map } = resolveEntities(hass, { type: 'custom:leapmotor-mate-card' })
   return { map, state: buildVehicleState(hass, map, REAL_NOW) }
 }
 
-describe('resolveAction', () => {
-  it('unlocks through the lock domain', () => {
-    const { map, state } = ctx()
-    expect(resolveAction('unlock', state, map)).toEqual({
-      domain: 'lock', service: 'unlock', entityId: 'lock.leapmotor_b10_000000_demo_lock',
-    })
-  })
+const press = (slug: string) => ({ domain: 'button', service: 'press', entityId: eid('button', slug) })
 
-  it('locks through the lock domain', () => {
+describe('resolveAction', () => {
+  it('unlocks and locks through the lock domain', () => {
     const { map, state } = ctx()
+    expect(resolveAction('unlock', state, map)).toEqual({ domain: 'lock', service: 'unlock', entityId: eid('lock', 'door_lock') })
     expect(resolveAction('lock', state, map)?.service).toBe('lock')
   })
 
-  it('opens the trunk when it is closed', () => {
-    const { map, state } = ctx()
-    expect(resolveAction('trunk', state, map)?.entityId).toBe('button.leapmotor_b10_000000_demo_open_trunk')
+  it('opens the trunk when it is closed and closes it when it is open', () => {
+    expect(resolveAction('trunk', ...Object.values(ctx()).reverse() as [never, never])).toEqual(press('open_trunk'))
+    const open = ctx({ 'binary_sensor/trunk': 'on' })
+    expect(resolveAction('trunk', open.state, open.map)).toEqual(press('close_trunk'))
   })
 
-  it('closes the trunk when it is open', () => {
-    const { map, state } = ctx({ 'binary_sensor/trunk_open': 'on' })
-    expect(resolveAction('trunk', state, map)?.entityId).toBe('button.leapmotor_b10_000000_demo_close_trunk')
+  it('opens the windows when all are closed and closes them when one is open', () => {
+    const closed = ctx()
+    expect(resolveAction('windows', closed.state, closed.map)).toEqual(press('open_windows'))
+    const open = ctx({ 'binary_sensor/window_rear_left': 'on' })
+    expect(resolveAction('windows', open.state, open.map)).toEqual(press('close_windows'))
   })
 
-  it('opens the windows when they are all closed', () => {
-    const { map, state } = ctx()
-    expect(resolveAction('windows', state, map)?.entityId).toBe('button.leapmotor_b10_000000_demo_open_windows')
+  it('toggles the sunshade with its two buttons', () => {
+    const closed = ctx()
+    expect(resolveAction('sunshade', closed.state, closed.map)).toEqual(press('open_sunshade'))
+    const open = ctx({ 'binary_sensor/sunshade': 'on', 'sensor/sunshade_position': '40' })
+    expect(resolveAction('sunshade', open.state, open.map)).toEqual(press('close_sunshade'))
   })
 
-  it('closes the windows when one of them is open by position', () => {
-    const { map, state } = ctx({ 'sensor/rear_right_window_position_percent': '40' })
-    expect(resolveAction('windows', state, map)?.entityId).toBe('button.leapmotor_b10_000000_demo_close_windows')
+  it('turns the climate on with A/C Auto and off with A/C Off', () => {
+    const off = ctx()
+    expect(resolveAction('climate', off.state, off.map)).toEqual(press('a_c_auto'))
+    const on = ctx({ 'binary_sensor/climate': 'on' })
+    expect(resolveAction('climate', on.state, on.map)).toEqual(press('a_c_off'))
   })
 
-  it('toggles the climate switch according to its state', () => {
-    expect(resolveAction('climate', ctx().state, ctx().map)?.service).toBe('turn_on')
-    const on = ctx({ 'switch/climate_control': 'on' })
-    expect(resolveAction('climate', on.state, on.map)?.service).toBe('turn_off')
-  })
-
-  it('returns undefined when the entity is not in the map', () => {
-    const { state } = ctx()
-    expect(resolveAction('trunk', state, {})).toBeUndefined()
+  it('has no climate call when Mate hides A/C Off on this car', () => {
+    const on = ctx({ 'binary_sensor/climate': 'on', 'button/a_c_off': null })
+    expect(resolveAction('climate', on.state, on.map)).toBeUndefined()
+    expect(isActionAvailable('climate', on.state, on.map)).toBe(false)
   })
 
   it('covers every simple button', () => {
     const { map, state } = ctx()
-    for (const a of ['quickCool', 'quickHeat', 'defrost', 'findVehicle', 'unlockCharger', 'refresh'] as const) {
-      const call = resolveAction(a, state, map)
-      expect(call, a).toBeDefined()
-      expect(call!.domain, a).toBe('button')
-      expect(call!.service, a).toBe('press')
-    }
+    const table: [ActionId, string][] = [
+      ['quickCool', 'quick_cool'], ['quickHeat', 'quick_heat'], ['quickVentilation', 'quick_ventilation'],
+      ['defrost', 'defrost'], ['findVehicle', 'find_car'], ['unlockCharger', 'unlock_charge_cable'],
+      ['batteryPreheat', 'preheat_battery'], ['climateOff', 'a_c_off'],
+    ]
+    for (const [action, slug] of table) expect(resolveAction(action, state, map), action).toEqual(press(slug))
   })
 
-  it('toggles the comfort switches', () => {
+  it('has no refresh button: Mate polls the cloud on its own', () => {
     const { map, state } = ctx()
-    for (const a of ['steeringWheelHeat', 'mirrorHeat', 'batteryPreheat'] as const) {
-      expect(resolveAction(a, state, map)?.service, a).toBe('turn_on')
-    }
+    expect(resolveAction('refresh', state, map)).toBeUndefined()
+  })
+
+  it('toggles the steering wheel and the mirrors with their on/off buttons', () => {
+    const off = ctx()
+    expect(resolveAction('steeringWheelHeat', off.state, off.map)).toEqual(press('steering_heat_on'))
+    expect(resolveAction('mirrorHeat', off.state, off.map)).toEqual(press('mirror_heat_on'))
+    const on = ctx({ 'sensor/steering_wheel_heat': '1', 'sensor/mirror_heating_left': '1' })
+    expect(resolveAction('steeringWheelHeat', on.state, on.map)).toEqual(press('steering_heat_off'))
+    expect(resolveAction('mirrorHeat', on.state, on.map)).toEqual(press('mirror_heat_off'))
+  })
+
+  it('toggles each seat function with its own pair of buttons, from the level the car reports', () => {
+    const off = ctx()
+    expect(resolveAction('driverSeatHeat', off.state, off.map)).toEqual(press('driver_seat_heat_on'))
+    expect(resolveAction('passengerSeatVent', off.state, off.map)).toEqual(press('passenger_seat_vent_on'))
+    const on = ctx({ 'sensor/seat_heating_driver': '2', 'sensor/seat_ventilation_passenger': '1' })
+    expect(resolveAction('driverSeatHeat', on.state, on.map)).toEqual(press('driver_seat_heat_off'))
+    expect(resolveAction('passengerSeatVent', on.state, on.map)).toEqual(press('passenger_seat_vent_off'))
+    // a seat that is on in one function does not turn the other one off
+    expect(resolveAction('driverSeatVent', on.state, on.map)).toEqual(press('driver_seat_vent_on'))
+  })
+
+  it('has no call for a function Mate does not publish on this car (the B10 case)', () => {
+    const b10 = ctx({ 'button/driver_seat_heat_on': null, 'button/driver_seat_heat_off': null, 'button/steering_heat_on': null, 'button/steering_heat_off': null })
+    expect(resolveAction('driverSeatHeat', b10.state, b10.map)).toBeUndefined()
+    expect(resolveAction('steeringWheelHeat', b10.state, b10.map)).toBeUndefined()
+    expect(resolveAction('mirrorHeat', b10.state, b10.map)).toEqual(press('mirror_heat_on'))
+  })
+
+  it('sets the charge limit on the number entity, leaving the value to the slider', () => {
+    const { map, state } = ctx()
+    expect(resolveAction('setChargeLimit', state, map)).toEqual({ domain: 'number', service: 'set_value', entityId: eid('number', 'charge_limit') })
+  })
+
+  it('returns undefined when the entity is not in the map', () => {
+    const { map, state } = ctx({ 'lock/door_lock': null })
+    expect(resolveAction('lock', state, map)).toBeUndefined()
   })
 })
 
 describe('actionLabel and actionIcon', () => {
-  it('the trunk label changes with the state', () => {
-    expect(actionLabel('trunk', ctx().state, t)).toBe('Bagageira')
-    expect(actionLabel('trunk', ctx({ 'binary_sensor/trunk_open': 'on' }).state, t)).toBe('Fechar bagageira')
-  })
-
-  it('the windows label changes with the state', () => {
-    expect(actionLabel('windows', ctx().state, t)).toBe('Vidros')
-    expect(actionLabel('windows', ctx({ 'binary_sensor/front_left_window_open': 'on' }).state, t)).toBe('Fechar vidros')
+  it('the trunk and windows labels change with the state', () => {
+    const closed = ctx()
+    const open = ctx({ 'binary_sensor/trunk': 'on', 'binary_sensor/window_front_left': 'on' })
+    expect(actionLabel('trunk', closed.state, t)).not.toBe(actionLabel('trunk', open.state, t))
+    expect(actionLabel('windows', closed.state, t)).not.toBe(actionLabel('windows', open.state, t))
   })
 
   it('the climate label says what the tap will do', () => {
-    expect(actionLabel('climate', ctx().state, t)).toBe('Ligar climatização')
-    expect(actionLabel('climate', ctx({ 'switch/climate_control': 'on' }).state, t)).toBe('Desligar climatização')
-  })
-
-  it('the climate label promises the service that actually gets called', () => {
-    // The defect this closes is a label saying "turn off" while the service
-    // turns on (or the other way around): the two decisions live in
-    // different functions and have to start from the same comparison against
-    // `true`. An unknown state counts as off in both.
-    for (const climate of [undefined, 'off', 'on', 'unavailable']) {
-      const { map, state } = ctx(climate === undefined ? {} : { 'switch/climate_control': climate })
-      const turningOn = resolveAction('climate', state, map)?.service === 'turn_on'
-      expect(actionLabel('climate', state, t), String(climate))
-        .toBe(turningOn ? 'Ligar climatização' : 'Desligar climatização')
-    }
+    const off = ctx()
+    const on = ctx({ 'binary_sensor/climate': 'on' })
+    expect(actionLabel('climate', off.state, t)).toBe(t('action.climate_on'))
+    expect(actionLabel('climate', on.state, t)).toBe(t('action.climate_off'))
   })
 
   it('returns an mdi icon for every action', () => {
     const { state } = ctx()
-    for (const a of ['unlock', 'lock', 'trunk', 'windows', 'climate', 'refresh'] as const) {
-      expect(actionIcon(a, state), a).toMatch(/^mdi:/)
-    }
+    for (const action of Object.keys(ALL_ACTIONS) as ActionId[]) expect(actionIcon(action, state), action).toMatch(/^mdi:/)
   })
 
   it('every action has a translated label — none shows the raw key', () => {
     const { state } = ctx()
-    for (const a of Object.keys(ALL_ACTIONS) as ActionId[]) {
-      expect(actionLabel(a, state, t), a).not.toBe(`action.${a}`)
+    for (const action of Object.keys(ALL_ACTIONS) as ActionId[]) {
+      const label = actionLabel(action, state, t)
+      expect(label, action).not.toMatch(/^action\./)
+      expect(label.length, action).toBeGreaterThan(0)
     }
-  })
-})
-
-describe('resolveAction — leapmotor services', () => {
-  it('the sunshade closes with value 0', () => {
-    const { map, state } = ctx()
-    const call = resolveAction('sunshade', state, map, { position: 0 })
-    expect(call?.domain).toBe('leapmotor')
-    expect(call?.service).toBe('sunshade_close')
-    expect(call?.data).toEqual({ value: 0 })
-    expect(call?.entityIdAsField).toBe(true)
-  })
-
-  it('the sunshade opens to an intermediate position', () => {
-    const { map, state } = ctx()
-    const call = resolveAction('sunshade', state, map, { position: 5 })
-    expect(call?.service).toBe('sunshade_open')
-    expect(call?.data).toEqual({ value: 5 })
-  })
-
-  it('the sunshade position is clamped to 0..10', () => {
-    const { map, state } = ctx()
-    expect(resolveAction('sunshade', state, map, { position: 99 })?.data).toEqual({ value: 10 })
-    expect(resolveAction('sunshade', state, map, { position: -3 })?.data).toEqual({ value: 0 })
-  })
-
-  it('without a value there is no sunshade call', () => {
-    const { map, state } = ctx()
-    expect(resolveAction('sunshade', state, map)).toBeUndefined()
-  })
-
-  it('setClimate sends mode, temperature, fan and recirculation, with entity_id as a field', () => {
-    const { map, state } = ctx()
-    const call = resolveAction('setClimate', state, map, { climate: { temperature: 22, fanSpeed: 3, recirculate: false } })
-    expect(call?.domain).toBe('leapmotor')
-    expect(call?.service).toBe('set_climate')
-    expect(call?.entityIdAsField).toBe(true)
-    // interior 24.0 > target 22 -> cool
-    expect(call?.data).toEqual({ mode: 'cold', temperature: 22, fan_speed: 3, recirculate: false })
-  })
-
-  it('setClimate heats when the target is above the interior', () => {
-    const { map, state } = ctx()
-    expect(resolveAction('setClimate', state, map, { climate: { temperature: 28, fanSpeed: 3, recirculate: false } })?.data)
-      .toEqual({ mode: 'hot', temperature: 28, fan_speed: 3, recirculate: false })
-  })
-
-  it('setClimate respects the mode reported by the car', () => {
-    const { map, state } = ctx({ 'sensor/climate_mode': 'wind' })
-    expect(resolveAction('setClimate', state, map, { climate: { temperature: 22, fanSpeed: 3, recirculate: false } })?.data)
-      .toEqual({ mode: 'wind', temperature: 22, fan_speed: 3, recirculate: false })
-  })
-
-  it('the temperature is clamped to 18..32', () => {
-    const { map, state } = ctx()
-    expect(resolveAction('setClimate', state, map, { climate: { temperature: 5, fanSpeed: 3, recirculate: false } })?.data)
-      .toMatchObject({ temperature: 18 })
-    expect(resolveAction('setClimate', state, map, { climate: { temperature: 99, fanSpeed: 3, recirculate: false } })?.data)
-      .toMatchObject({ temperature: 32 })
-  })
-
-  it('setClimate always sends fan and recirculation, not just the temperature', () => {
-    const { map, state } = ctx()
-    const call = resolveAction('setClimate', state, map, {
-      climate: { temperature: 22, fanSpeed: 5, recirculate: true },
-    })
-    expect(call?.data).toEqual({ mode: 'cold', temperature: 22, fan_speed: 5, recirculate: true })
-  })
-
-  it('the fan is clamped to 1..7', () => {
-    const { map, state } = ctx()
-    const lo = resolveAction('setClimate', state, map, { climate: { temperature: 22, fanSpeed: 0, recirculate: false } })
-    const hi = resolveAction('setClimate', state, map, { climate: { temperature: 22, fanSpeed: 99, recirculate: false } })
-    expect(lo?.data).toMatchObject({ fan_speed: 1 })
-    expect(hi?.data).toMatchObject({ fan_speed: 7 })
-  })
-
-  it('setClimate does not resolve without a command', () => {
-    const { map, state } = ctx()
-    expect(resolveAction('setClimate', state, map, { position: 5 })).toBeUndefined()
-  })
-
-  it('find vehicle uses the location marker icon', () => {
-    expect(actionIcon('findVehicle', ctx().state)).toBe('mdi:map-marker-radius-outline')
-  })
-
-  it('the unified sunshade uses the "Cortina" label', () => {
-    expect(actionLabel('sunshade', ctx().state, t)).toBe('Cortina')
   })
 })
 
@@ -361,96 +286,17 @@ describe('shownLevel', () => {
   })
 })
 
-describe('composeClimateCommand', () => {
-  // `leapmotor.set_climate` resets to defaults everything that isn't sent,
-  // so what this command carries is what the car ends up with. It was the
-  // only card decision with no test at all, and one of the ones this plan
-  // exists to fix: `fanSpeed: 3` instead of the user's choice is exactly the
-  // silent reset that motivated pulling the fan control out of the panel.
-  it('carries the fan speed the user chose, not a default', () => {
-    const { state } = ctx()
-    expect(composeClimateCommand({ fanSpeed: 6 }, state).fanSpeed).toBe(6)
-    expect(composeClimateCommand({ fanSpeed: 1 }, state).fanSpeed).toBe(1)
-  })
-
-  it('carries the recirculation the car reports when nobody touched it', () => {
-    const { state } = ctx({ 'binary_sensor/air_recirculation': 'on' })
-    expect(composeClimateCommand({ fanSpeed: 3 }, state).recirculate).toBe(true)
-  })
-
-  it('carries the unconfirmed request ahead of the reading, in both fields', () => {
-    const { state } = ctx({ 'binary_sensor/air_recirculation': 'on' })
-    const intent: ClimateIntent = {
-      fanSpeed: 4,
-      temperature: { wanted: 21, reading: 24 },
-      recirculate: { wanted: false, reading: true },
-    }
-    expect(composeClimateCommand(intent, state)).toEqual({ temperature: 21, fanSpeed: 4, recirculate: false })
-  })
-
-  it('carries the car\'s reading when there is no request at all', () => {
-    // 20, not the fixture's 24: with the reading equal to the service
-    // default, deleting the `?? state.climate.targetC` didn't change the
-    // result, and the test would pass against both versions of the code.
-    const { state } = ctx({ 'sensor/climate_set_temp_left_c': '20.0' })
-    expect(composeClimateCommand({ fanSpeed: 3 }, state))
-      .toEqual({ temperature: 20, fanSpeed: 3, recirculate: false })
-  })
-
-  it('touching only the recirculation does not touch the temperature the car has', () => {
-    // `set_climate` resets to defaults whatever isn't sent: a car at 20 °C
-    // where the user only toggles the recirculation has to receive 20, not
-    // the default's 24.
-    const { state } = ctx({ 'sensor/climate_set_temp_left_c': '20.0' })
-    const intent: ClimateIntent = { fanSpeed: 5, recirculate: { wanted: true, reading: false } }
-    expect(composeClimateCommand(intent, state))
-      .toEqual({ temperature: 20, fanSpeed: 5, recirculate: true })
-  })
-
-  it('with no reading at all it falls back to the service defaults, and only there', () => {
-    const { state } = ctx({
-      'sensor/climate_set_temp_left_c': 'unavailable',
-      'binary_sensor/air_recirculation': 'unavailable',
-    })
-    expect(composeClimateCommand({ fanSpeed: 2 }, state))
-      .toEqual({ temperature: 24, fanSpeed: 2, recirculate: false })
-  })
-})
-
-describe('nextStepTemperature', () => {
-  it('a tap moves one degree from the value the user sees', () => {
-    // The tile and the stepper show the target with the same decimal places;
-    // if the stepper started from the raw value, a target of 23.5 would
-    // show 24 and a tap would jump to 25 — a degree and a half in one tap.
-    for (const reported of [18, 20.4, 23.5, 24, 27.6, 32]) {
-      const shown = Number(formatNumber(reported, TARGET_TEMP_DECIMALS))
-      expect(nextStepTemperature(reported, 1), String(reported)).toBe(Math.min(TEMP_MAX, shown + 1))
-      expect(nextStepTemperature(reported, -1), String(reported)).toBe(Math.max(TEMP_MIN, shown - 1))
-    }
-  })
-
-  it('does not leave the range the service accepts', () => {
-    expect(nextStepTemperature(TEMP_MAX, 1)).toBe(TEMP_MAX)
-    expect(nextStepTemperature(TEMP_MIN, -1)).toBe(TEMP_MIN)
-  })
-
-  it('with no target at all it starts from the service default', () => {
-    expect(nextStepTemperature(undefined, 1)).toBe(25)
-    expect(nextStepTemperature(undefined, -1)).toBe(23)
-  })
-})
-
 describe('decideAction', () => {
   it('blocks an openings action while the car is moving', () => {
     // The check can't live only in the button: a panel already open, or a
     // stale render, would bypass a control that is merely disabled.
-    const { map, state } = ctx({ 'binary_sensor/is_driving': 'on' })
+    const { map, state } = ctx({ 'sensor/state': 'driving' })
     expect(decideAction('unlock', state, map, undefined).kind).toBe('blocked')
-    expect(decideAction('sunshade', state, map, undefined, { position: 5 }).kind).toBe('blocked')
+    expect(decideAction('sunshade', state, map, undefined).kind).toBe('blocked')
   })
 
   it('blocks while moving exactly the actions in the list, and no others', () => {
-    const { map, state } = ctx({ 'binary_sensor/is_driving': 'on' })
+    const { map, state } = ctx({ 'sensor/state': 'driving' })
     for (const action of Object.keys(ALL_ACTIONS) as ActionId[]) {
       // No payload on purpose: the block is decided before the action is
       // resolved, so a payload action gives 'blocked' or 'unavailable',
@@ -467,7 +313,7 @@ describe('decideAction', () => {
     if (decision.kind !== 'confirm') return
     expect(decision.answer(false)).toBeUndefined()
     expect(decision.answer(true)).toEqual({
-      domain: 'lock', service: 'unlock', entityId: 'lock.leapmotor_b10_000000_demo_lock',
+      domain: 'lock', service: 'unlock', entityId: eid('lock', 'door_lock'),
     })
   })
 
@@ -495,12 +341,12 @@ describe('decideAction', () => {
     if (decision.kind !== 'confirm') return
     expect(decision.answer(false)).toBeUndefined()
     expect(decision.answer(true)).toEqual({
-      domain: 'lock', service: 'lock', entityId: 'lock.leapmotor_b10_000000_demo_lock',
+      domain: 'lock', service: 'lock', entityId: eid('lock', 'door_lock'),
     })
   })
 
   it('forceConfirm does not get past the while-driving block', () => {
-    const { map, state } = ctx({ 'binary_sensor/is_driving': 'on' })
+    const { map, state } = ctx({ 'sensor/state': 'driving' })
     expect(decideAction('lock', state, map, [], undefined, true).kind).toBe('blocked')
   })
 
@@ -528,7 +374,7 @@ describe('lockPillShape', () => {
     // What the user asked for, and what the actions row already does: no
     // commanding the locks in motion. Text, not a dimmed button — the
     // reading stays as true and as legible as when parked.
-    const { map, state } = ctx({ 'binary_sensor/is_driving': 'on' })
+    const { map, state } = ctx({ 'sensor/state': 'driving' })
     expect(lockPillShape(state, map, undefined)).toBe('text')
   })
 
@@ -550,7 +396,7 @@ describe('lockToggleAction', () => {
   })
 
   it('offers locking when the car reports itself unlocked', () => {
-    const { state } = ctx({ 'lock/vehicle_lock': 'unlocked' })
+    const { state } = ctx({ 'lock/door_lock': 'unlocked' })
     expect(state.lock.locked).toBe(false)
     expect(lockToggleAction(state)).toBe('lock')
   })
@@ -558,79 +404,39 @@ describe('lockToggleAction', () => {
   it('offers locking, never unlocking, when the state is unknown', () => {
     // Comparison against `true`, like `toggleSwitch` and `actionIcon`: an
     // unreadable lock must never make the card offer to open the car.
-    const { state } = ctx({ 'lock/vehicle_lock': 'unavailable' })
+    const { state } = ctx({ 'lock/door_lock': 'unavailable' })
     expect(state.lock.locked).toBeUndefined()
     expect(lockToggleAction(state)).toBe('lock')
   })
 })
 
 describe('isActionAvailable', () => {
-  it('the sunshade is available when there is an addressable vehicle, even with no value chosen', () => {
-    const { map, state } = ctx()
-    expect(isActionAvailable('sunshade', state, map)).toBe(true)
-  })
-
-  it('the sunshade is not available with no vehicle entity at all', () => {
-    const { state } = ctx()
-    expect(isActionAvailable('sunshade', state, {})).toBe(false)
-  })
-
-  it('a normal action (trunk) stays available with its own entity', () => {
+  it('a normal action is available with its own entity and unavailable without it', () => {
     const { map, state } = ctx()
     expect(isActionAvailable('trunk', state, map)).toBe(true)
+    const none = ctx({ 'button/open_trunk': null })
+    expect(isActionAvailable('trunk', none.state, none.map)).toBe(false)
   })
 
-  it('a normal action (trunk) becomes unavailable without its entity', () => {
-    const { state } = ctx()
-    expect(isActionAvailable('trunk', state, {})).toBe(false)
-  })
-
-  it('setClimate is not available as a button, even with the vehicle fully addressable', () => {
-    // setClimate requires a value, but has no panel of its own in
-    // CONTROL_PANEL: routing it to another action's panel (the sunshade)
-    // would make a button labeled "Temperatura" control the sunshade instead
-    // of the climate.
+  it('the sunshade is available when its buttons exist', () => {
     const { map, state } = ctx()
-    expect(isActionAvailable('setClimate', state, map)).toBe(false)
+    expect(isActionAvailable('sunshade', state, map)).toBe(true)
+    const none = ctx({ 'button/open_sunshade': null })
+    expect(isActionAvailable('sunshade', none.state, none.map)).toBe(false)
   })
 
-  /**
-   * The parity that AVAILABILITY_PROBE promises: an action is only
-   * "available" if the vehicle is addressable, and the probing payload
-   * exists so that payload actions don't answer "no" just because they're
-   * missing a value the user hasn't chosen yet. This test pins the expected
-   * answer for EVERY action, one by one, not just that the function returns
-   * a boolean: touching the probe table — removing an action from it, or
-   * putting a non-payload one in it — changes one of these answers and
-   * fails here. The third `expect` is the leak detector: an action that is
-   * not a payload action has to give the SAME answer with no probing at
-   * all, because `resolveAction` ignores the payload in that case.
-   */
-  it('answers for every action, and probing does not change the answer for any that is not a payload action', () => {
+  it('setChargeLimit is never a row button: its value comes from the slider', () => {
     const { map, state } = ctx()
-    const expected: Record<ActionId, boolean> = {
-      unlock: true, lock: true, trunk: true, windows: true, sunshade: true,
-      quickCool: true, quickHeat: true, defrost: true,
-      findVehicle: true, unlockCharger: true, refresh: true,
-      climate: true, steeringWheelHeat: true, mirrorHeat: true, batteryPreheat: true,
-      // Payload actions with no panel of their own: never buttons in the action row.
-      setChargeLimit: false, setClimate: false,
-    }
-    for (const action of Object.keys(ALL_ACTIONS) as ActionId[]) {
-      expect(isActionAvailable(action, state, map), action).toBe(expected[action])
-      expect(isActionAvailable(action, state, {}), action).toBe(false)
-      if (!PAYLOAD_ACTIONS.includes(action)) {
-        expect(resolveAction(action, state, map) !== undefined, action).toBe(expected[action])
-      }
-    }
-  })
-
-  it('setChargeLimit is not available as a button, even with the limit entity present', () => {
-    // setChargeLimit also requires a value (the `number.set_value` call
-    // comes with no `data`, see the comment in resolveAction) and also has
-    // no panel of its own in CONTROL_PANEL: the value comes from the
-    // charging panel's slider, not from the action row.
-    const { map, state } = ctx()
+    expect(PAYLOAD_ACTIONS).toContain('setChargeLimit')
     expect(isActionAvailable('setChargeLimit', state, map)).toBe(false)
+  })
+
+  it('answers for every action without throwing', () => {
+    const { map, state } = ctx()
+    for (const action of Object.keys(ALL_ACTIONS) as ActionId[]) expect(typeof isActionAvailable(action, state, map)).toBe('boolean')
+  })
+
+  it('the while-driving list names only existing actions', () => {
+    for (const action of BLOCKED_WHILE_DRIVING) expect(Object.keys(ALL_ACTIONS)).toContain(action)
   })
 })

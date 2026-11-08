@@ -13,8 +13,8 @@ export class LeapmotorComfort extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
   @property({ attribute: false }) map!: EntityMap
-  /** Maximum level, read from the `max` attribute of the number entities. */
-  @property({ type: Number }) maxLevel = 3
+  /** Kept for the card's bindings; seats are on/off with Mate. */
+  @property({ type: Number }) maxLevel = 1
   /**
    * The levels this section shows, already reconciled by the card. The
    * climate panel's pin commands these same four entities and receives
@@ -24,41 +24,35 @@ export class LeapmotorComfort extends LitElement {
    */
   @property({ attribute: false }) shownLevels: SeatLevels = {}
 
-  private setNumber(key: LogicalKey, value: number) {
-    this.dispatchEvent(new CustomEvent('leapmotor-set-number', {
-      detail: { key, value }, bubbles: true, composed: true,
-    }))
-  }
-
   private fireAction(action: ActionId) {
     this.dispatchEvent(new CustomEvent<ActionEventDetail>('leapmotor-action', {
       detail: { action }, bubbles: true, composed: true,
     }))
   }
 
+  /**
+   * A seat. Mate commands it with an on and an off button and reports a
+   * level, so the control is a toggle that shows the level the car reports.
+   */
   private levelRow(row: LevelRow) {
     if (!this.map[row.key]) return nothing
-    // `shownLevel` is shared with the climate panel's pin, which commands
-    // these same entities: it's what guarantees that the two sections,
-    // visible at the same time, never flag different levels for the same
-    // seat.
     const { level: shown, pending } = shownLevel(this.shownLevels[row.key], row.value)
     return html`<div class="line">
-      <span class="muted"><ha-icon icon=${row.icon}></ha-icon> ${row.label}</span>
-      <span class="steps ${pending ? 'pending' : ''}">
-        ${Array.from({ length: this.maxLevel + 1 }, (_, level) => level).map(level => html`
-          <button
-            class="plain step ${shown === level ? 'active' : ''}"
-            @click=${() => this.setNumber(row.key, level)}
-            title="${row.label} ${level}"
-          >${level === 0 ? '·' : level}</button>
-        `)}
-      </span>
+      <span class="muted"><ha-icon icon=${row.icon}></ha-icon> ${row.label}${shown ? ` · ${shown}` : ''}</span>
+      <button
+        class="plain toggle ${shown ? 'on' : ''} ${pending ? 'pending' : ''}"
+        @click=${() => this.dispatchEvent(new CustomEvent('leapmotor-seat', { detail: { key: row.key }, bubbles: true, composed: true }))}
+        title=${row.label}
+        aria-label=${row.label}
+        aria-pressed=${shown === undefined ? nothing : (shown > 0 ? 'true' : 'false')}
+      >
+        <ha-icon icon=${shown ? 'mdi:toggle-switch' : 'mdi:toggle-switch-off-outline'}></ha-icon>
+      </button>
     </div>`
   }
 
   private toggleRow(action: ActionId, key: LogicalKey, label: string, on: boolean | undefined, icon: string) {
-    if (!this.map[key]) return nothing
+    if (!this.map[key === 'batteryPreheat' ? 'batteryPreheat' : key === 'steeringWheelHeat' ? 'steeringWheelHeatOn' : 'mirrorHeatOn']) return nothing
     return html`<div class="line">
       <span class="muted"><ha-icon icon=${icon}></ha-icon> ${label}</span>
       <button class="plain toggle ${on ? 'on' : ''}" @click=${() => this.fireAction(action)}>
@@ -88,11 +82,10 @@ export class LeapmotorComfort extends LitElement {
   static override styles = [sharedStyles, css`
     .title { font-size: 1.05rem; font-weight: 600; margin-bottom: 8px; }
     .line { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; font-size: 0.88rem; }
-    .steps { display: flex; gap: 6px; }
     /* Request pending confirmation, same as the climate panel's pin:
        (0,2,0) over .steps (0,1,0), and no button involved, so no all: unset
        trap. */
-    .steps.pending { opacity: 0.6; }
+    button.plain.toggle.pending { opacity: 0.6; }
     button.plain.step {
       width: 28px; height: 28px; border-radius: 50%;
       display: grid; place-items: center; background: var(--card-background-color); font-size: 0.8rem;

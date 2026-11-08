@@ -6,7 +6,7 @@ import { createTranslator, DASH } from '../src/localize'
 import { resolveEntities } from '../src/resolver'
 import { DEFAULT_TIRE_RANGE, type EntityMap, type GroupId, type LeapmotorCardConfig } from '../src/types'
 import { buildVehicleState } from '../src/vehicle-state'
-import { REAL_NOW, realHass } from './fixtures/real-states'
+import { MATE_NOW as REAL_NOW, mateHass as realHass } from './fixtures/mate-states'
 
 const CONFIG: LeapmotorCardConfig = { type: 'custom:leapmotor-card' }
 const t = createTranslator('en')
@@ -105,15 +105,6 @@ describe('resolveGrid — hand-written grid', () => {
     expect(resolveGrid(config, realMap()).groups[0]?.summary).toBe(GROUP_CATALOGUE.tires.summaries[0])
   })
 
-  it('maps the retired `last7` spelling onto the summary\'s current name', () => {
-    // `last7` shipped in a released card, so somebody's YAML says it. It
-    // resolves to `recentDays` in silence — no warning, because the name was
-    // ours and not their mistake — and the fallback to the group's default
-    // must never be what catches it.
-    const config: LeapmotorCardConfig = { ...CONFIG, grid: [{ group: 'trip', summary: 'last7' }] }
-    expect(resolveGrid(config, realMap()).groups[0]?.summary).toBe('recentDays')
-  })
-
   it('names an unknown group instead of silently ignoring it', () => {
     const config = { ...CONFIG, grid: ['tires', 'radio'] } as unknown as LeapmotorCardConfig
     const { groups, unknown } = resolveGrid(config, realMap())
@@ -180,25 +171,19 @@ describe('summaryFor — charging', () => {
     // read as "Charging 28.8 %" with the car parked in the street and
     // nothing plugged in.
     expect(summaryFor(group('charging'), realState(), t, 'en'))
-      .toBe(`60.3 % · ${t('charging.unplugged')}`)
+      .toBe(`64.0 % · ${t('charging.unplugged')}`)
   })
 
   it('says which speed it is charging at, in the same line as the percentage', () => {
-    const state = realState({ 'binary_sensor/is_charging': 'on', 'binary_sensor/is_plugged_in': 'on' })
+    const state = realState({ 'binary_sensor/charging': 'on', 'binary_sensor/plug_connected': 'on' })
     expect(summaryFor(group('charging'), state, t, 'en'))
-      .toBe(`60.3 % · ${t('charging.slow')}`)
+      .toBe(`64.0 % · ${t('charging.slow')}`)
   })
 
   it('distinguishes plugged in but not charging', () => {
-    const state = realState({ 'binary_sensor/is_plugged_in': 'on' })
+    const state = realState({ 'binary_sensor/plug_connected': 'on' })
     expect(summaryFor(group('charging'), state, t, 'en'))
-      .toBe(`60.3 % · ${t('charging.plugged')}`)
-  })
-
-  it('says fully charged', () => {
-    const state = realState({ 'binary_sensor/fully_charged': 'on' })
-    expect(summaryFor(group('charging'), state, t, 'en'))
-      .toBe(`60.3 % · ${t('charging.complete')}`)
+      .toBe(`64.0 % · ${t('charging.plugged')}`)
   })
 
   it('with no battery reading, the charging state stands on its own', () => {
@@ -206,7 +191,7 @@ describe('summaryFor — charging', () => {
     // that is missing is dropped, and a dash in its place would assert an
     // unknown percentage next to a state that is perfectly known.
     const state = realState({
-      'sensor/battery_percent': 'unavailable',
+      'sensor/battery': 'unavailable',
       'sensor/battery_percent_precise': 'unavailable',
     })
     expect(summaryFor(group('charging'), state, t, 'en')).toBe(t('charging.unplugged'))
@@ -215,7 +200,7 @@ describe('summaryFor — charging', () => {
   it('the percentage on its own is still available as `battery`', () => {
     // Whoever already has `summary: battery` in their YAML keeps exactly
     // what they configured.
-    expect(summaryFor(group('charging', 'battery'), realState(), t, 'en')).toBe('60.3 %')
+    expect(summaryFor(group('charging', 'battery'), realState(), t, 'en')).toBe('64.0 %')
   })
 
   it('shows the charge limit', () => {
@@ -231,7 +216,7 @@ describe('summaryFor — charging', () => {
   })
 
   it('gives DASH for the battery when no battery sensor is valid', () => {
-    const state = realState({ 'sensor/battery_percent': 'unavailable', 'sensor/battery_percent_precise': 'unavailable' })
+    const state = realState({ 'sensor/battery': 'unavailable', 'sensor/battery_percent_precise': 'unavailable' })
     expect(summaryFor(group('charging', 'battery'), state, t, 'en')).toBe(DASH)
   })
 })
@@ -246,15 +231,15 @@ describe('summaryFor — status', () => {
   })
 
   it('counts the openings in singular and plural', () => {
-    const one = realState({ 'binary_sensor/trunk_open': 'on' })
+    const one = realState({ 'binary_sensor/trunk': 'on' })
     expect(summaryFor(group('status', 'openings'), one, t, 'en')).toBe(t('openings.open_one'))
-    const two = realState({ 'binary_sensor/trunk_open': 'on', 'binary_sensor/skylight_open': 'on' })
+    const two = realState({ 'binary_sensor/trunk': 'on', 'binary_sensor/sunshade': 'on' })
     expect(summaryFor(group('status', 'openings'), two, t, 'en')).toBe(t('openings.open_count', { count: 2 }))
   })
 
   it('shows the trunk', () => {
     expect(summaryFor(group('status', 'trunk'), realState(), t, 'en')).toBe(t('openings.closed_fem'))
-    const open = realState({ 'binary_sensor/trunk_open': 'on' })
+    const open = realState({ 'binary_sensor/trunk': 'on' })
     expect(summaryFor(group('status', 'trunk'), open, t, 'en')).toBe(t('openings.open_fem'))
   })
 
@@ -264,7 +249,7 @@ describe('summaryFor — status', () => {
     // pass with the wrong key. That's the reason this test exists, staring
     // straight at the literal.
     const pt = createTranslator('pt')
-    const open = realState({ 'binary_sensor/trunk_open': 'on' })
+    const open = realState({ 'binary_sensor/trunk': 'on' })
     expect(summaryFor(group('status', 'trunk'), open, pt, 'pt')).toBe('Aberta')
     expect(summaryFor(group('status', 'trunk'), realState(), pt, 'pt')).toBe('Fechada')
   })
@@ -272,20 +257,20 @@ describe('summaryFor — status', () => {
 
 /** The fourteen opening readings of the real car, all unavailable. */
 const NO_OPENINGS: Record<string, string> = {
-  'binary_sensor/driver_door_open': 'unavailable',
-  'binary_sensor/passenger_door_open': 'unavailable',
-  'binary_sensor/rear_left_door_open': 'unavailable',
-  'binary_sensor/rear_right_door_open': 'unavailable',
-  'binary_sensor/front_left_window_open': 'unavailable',
-  'binary_sensor/front_right_window_open': 'unavailable',
-  'binary_sensor/rear_left_window_open': 'unavailable',
-  'binary_sensor/rear_right_window_open': 'unavailable',
+  'binary_sensor/door_front_left': 'unavailable',
+  'binary_sensor/door_front_right': 'unavailable',
+  'binary_sensor/door_rear_left': 'unavailable',
+  'binary_sensor/door_rear_right': 'unavailable',
+  'binary_sensor/window_front_left': 'unavailable',
+  'binary_sensor/window_front_right': 'unavailable',
+  'binary_sensor/window_rear_left': 'unavailable',
+  'binary_sensor/window_rear_right': 'unavailable',
   'sensor/front_left_window_position_percent': 'unavailable',
   'sensor/front_right_window_position_percent': 'unavailable',
   'sensor/rear_left_window_position_percent': 'unavailable',
   'sensor/rear_right_window_position_percent': 'unavailable',
-  'binary_sensor/trunk_open': 'unavailable',
-  'binary_sensor/skylight_open': 'unavailable',
+  'binary_sensor/trunk': 'unavailable',
+  'binary_sensor/sunshade': 'unavailable',
 }
 
 describe('summaryFor — what the card does not know', () => {
@@ -310,12 +295,12 @@ describe('summaryFor — what the card does not know', () => {
   it('claims everything closed with at least one closed reading', () => {
     // A single reading is enough to support the claim: the doors remain
     // unknown, but the trunk says closed and nothing is open.
-    const state = realState({ ...NO_OPENINGS, 'binary_sensor/trunk_open': 'off' })
+    const state = realState({ ...NO_OPENINGS, 'binary_sensor/trunk': 'off' })
     expect(summaryFor(group('status', 'openings'), state, t, 'en')).toBe(t('openings.all_closed'))
   })
 
   it('gives a dash, not the "Portas" label, for an unknown lock', () => {
-    const state = realState({ 'lock/vehicle_lock': 'unavailable' })
+    const state = realState({ 'lock/door_lock': 'unavailable' })
     expect(summaryFor(group('status'), state, t, 'en')).toBe(DASH)
   })
 })
@@ -338,10 +323,10 @@ describe('summaryFor — climate, tires, trip and location', () => {
 
   it('gives DASH for the tires when none is valid', () => {
     const state = realState({
-      'sensor/tire_pressure_front_left_bar': 'unavailable',
-      'sensor/tire_pressure_front_right_bar': 'unavailable',
-      'sensor/tire_pressure_rear_left_bar': 'unavailable',
-      'sensor/tire_pressure_rear_right_bar': 'unavailable',
+      'sensor/tyre_fl': 'unavailable',
+      'sensor/tyre_fr': 'unavailable',
+      'sensor/tyre_rl': 'unavailable',
+      'sensor/tyre_rr': 'unavailable',
     })
     expect(summaryFor(group('tires'), state, t, 'en')).toBe(DASH)
     expect(summaryFor(group('tires', 'worst'), state, t, 'en')).toBe(DASH)
@@ -366,19 +351,8 @@ describe('summaryFor — climate, tires, trip and location', () => {
    * is true of every string and therefore pinned nothing. It is now the actual
    * text, because the joining of the two facts is the behavior worth pinning.
    */
-  it('joins the activity and the zone by default in the location', () => {
-    expect(summaryFor(group('location'), realState(), t, 'en'))
-      .toBe(`${t('activity.parked')} · ${t('location.home')}`)
-  })
-
-  it("localizes Home Assistant's `home` token instead of printing it raw", () => {
-    expect(summaryFor(group('location', 'zone'), realState(), t, 'en')).toBe(t('location.home'))
-    expect(summaryFor(group('location', 'zone'), realState(), t, 'en')).not.toBe('home')
-  })
-
-  it('passes a custom zone through under its own name', () => {
-    const state = realState({ 'device_tracker/location': 'Garagem' })
-    expect(summaryFor(group('location', 'zone'), state, t, 'en')).toBe('Garagem')
+  it('shows the activity alone in the location: Mate\'s tracker names no real zone', () => {
+    expect(summaryFor(group('location'), realState(), t, 'en')).toBe(t('activity.parked'))
   })
 
   it('shows the activity alone when the car is in no zone', () => {
@@ -412,7 +386,7 @@ describe('alertFor — status', () => {
   })
 
   it('warns with one opening open', () => {
-    expect(alertFor(group('status'), realState({ 'binary_sensor/trunk_open': 'on' }), RANGE)).toBe('warn')
+    expect(alertFor(group('status'), realState({ 'binary_sensor/trunk': 'on' }), RANGE)).toBe('warn')
   })
 
   it('warns with the car unlocked, when the reading is fresh', () => {
@@ -421,21 +395,21 @@ describe('alertFor — status', () => {
     // reading would stay stale purely because of its age, and the test
     // would prove nothing.
     const state = realState({
-      'lock/vehicle_lock': 'unlocked', 'sensor/lock_state_source': 'cloud', 'sensor/lock_state_age_seconds': '60',
+      'lock/door_lock': 'unlocked', 'sensor/lock_state_source': 'cloud', 'sensor/lock_state_age_seconds': '60',
     })
     expect(alertFor(group('status'), state, RANGE)).toBe('warn')
   })
 
   it('does not alert with the car unlocked on a stale reading', () => {
     // An old reading is not an alert, it's an old reading. See spec §4.2.
-    const state = realState({ 'lock/vehicle_lock': 'unlocked' })
+    const state = realState({ 'lock/door_lock': 'unlocked', 'sensor/data_age': '3600' })
     expect(state.lock.stale).toBe(true)
     expect(alertFor(group('status'), state, RANGE)).toBe('none')
   })
 
   it('warns for an open opening even with the locks stale', () => {
     // The staleness belongs to the lock reading, not to the trunk.
-    const state = realState({ 'binary_sensor/trunk_open': 'on' })
+    const state = realState({ 'binary_sensor/trunk': 'on', 'sensor/data_age': '3600' })
     expect(state.lock.stale).toBe(true)
     expect(alertFor(group('status'), state, RANGE)).toBe('warn')
   })
@@ -450,21 +424,21 @@ describe('alertFor — tires', () => {
   })
 
   it('warns with one outside the range', () => {
-    const state = realState({ 'sensor/tire_pressure_front_left_bar': '1.9' })
+    const state = realState({ 'sensor/tyre_fl': '1.9' })
     expect(alertFor(group('tires'), state, RANGE)).toBe('warn')
   })
 
   it('escalates to alert with two or more outside the range', () => {
     const state = realState({
-      'sensor/tire_pressure_front_left_bar': '1.9',
-      'sensor/tire_pressure_rear_right_bar': '1.8',
+      'sensor/tyre_fl': '1.9',
+      'sensor/tyre_rr': '1.8',
     })
     expect(alertFor(group('tires'), state, RANGE)).toBe('alert')
   })
 
   it('counts both below the minimum and above the maximum as outside', () => {
-    const low = realState({ 'sensor/tire_pressure_front_left_bar': '1.9' })
-    const high = realState({ 'sensor/tire_pressure_front_left_bar': '3.1' })
+    const low = realState({ 'sensor/tyre_fl': '1.9' })
+    const high = realState({ 'sensor/tyre_fl': '3.1' })
     expect(alertFor(group('tires'), low, RANGE)).toBe('warn')
     expect(alertFor(group('tires'), high, RANGE)).toBe('warn')
   })
@@ -475,20 +449,21 @@ describe('alertFor — tires', () => {
     // tires sit at 2.17 bar, and raising the minimum too, to 2.4, would push
     // them out of range and the test would start flagging `alert` because
     // of them, not because of the tire under test.
-    const state = realState({ 'sensor/tire_pressure_front_left_bar': '2.8' })
+    const state = realState({ 'sensor/tyre_fl': '2.8' })
     expect(alertFor(group('tires'), state, RANGE)).toBe('warn')
     expect(alertFor(group('tires'), state, [2.0, 3.0] as const)).toBe('none')
   })
 
   it('does not count a tire with no reading as outside the range', () => {
-    const state = realState({ 'sensor/tire_pressure_front_left_bar': 'unavailable' })
+    const state = realState({ 'sensor/tyre_fl': 'unavailable' })
     expect(alertFor(group('tires'), state, RANGE)).toBe('none')
   })
 })
 
 describe('alertFor — location and the groups with no alert', () => {
-  it('warns with a stale position, which is the fixtures\' case', () => {
-    expect(alertFor(group('location'), realState(), RANGE)).toBe('warn')
+  it('warns with a stale position, judged by the age of the car\'s last message', () => {
+    expect(alertFor(group('location'), realState({ 'sensor/data_age': '3600' }), RANGE)).toBe('warn')
+    expect(alertFor(group('location'), realState(), RANGE)).toBe('none')
   })
 
   it('does not alert on charging, climate, or trip', () => {

@@ -7,12 +7,6 @@ export interface ServiceCall {
   domain: string
   service: string
   entityId: string
-  /**
-   * The `leapmotor` domain services receive the vehicle as a FIELD
-   * (`data.entity_id`), not as a service target. See spec v2 §2.5. The rest
-   * of the card uses target, which is the normal Home Assistant form.
-   */
-  entityIdAsField?: boolean
   data?: Record<string, unknown>
 }
 
@@ -21,61 +15,18 @@ function press(map: EntityMap, key: LogicalKey): ServiceCall | undefined {
   return entityId ? { domain: 'button', service: 'press', entityId } : undefined
 }
 
-function toggleSwitch(map: EntityMap, key: LogicalKey, on: boolean | undefined): ServiceCall | undefined {
-  const entityId = map[key]
-  return entityId ? { domain: 'switch', service: on === true ? 'turn_off' : 'turn_on', entityId } : undefined
+/**
+ * Mate commands the comfort functions with a pair of buttons (`…_on` /
+ * `…_off`) and reports the state in a separate sensor: pressing the one that
+ * reverses the reading is the toggle. With no reading it offers "on", like
+ * every other toggle in this card — never an unrequested "off".
+ */
+function pressPair(map: EntityMap, onKey: LogicalKey, offKey: LogicalKey, on: boolean | undefined): ServiceCall | undefined {
+  return press(map, on === true ? offKey : onKey)
 }
 
 function anyWindowOpen(state: VehicleState): boolean {
   return Object.values(state.openings.windows).some(isWindowOpen)
-}
-
-type ClimateMode = 'cold' | 'hot' | 'wind' | 'nohotcold'
-
-/**
- * `mode` is mandatory in `leapmotor.set_climate` and the user should not have
- * to choose it. Use the mode the car reports when it's one of the accepted
- * ones; otherwise cool if the interior is above target, heat if it's below.
- */
-function climateMode(state: VehicleState, target: number): ClimateMode {
-  const reported = state.climate.mode?.toLowerCase()
-  if (reported === 'cold' || reported === 'hot' || reported === 'wind' || reported === 'nohotcold') {
-    return reported
-  }
-  const interior = state.climate.interiorC
-  if (interior === undefined) return 'nohotcold'
-  if (interior > target) return 'cold'
-  if (interior < target) return 'hot'
-  return 'nohotcold'
-}
-
-/** Any of the car's entities can identify the vehicle in a `leapmotor.*` service. */
-function vehicleAnchor(map: EntityMap): string | undefined {
-  return map.battery ?? map.lock ?? map.range
-}
-
-function clamp(n: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, Math.round(n)))
-}
-
-/** A complete climate command. The integration resets to defaults whatever isn't sent. */
-export interface ClimateCommand {
-  temperature: number
-  fanSpeed: number
-  recirculate: boolean
-}
-
-/**
- * What a climate panel control just changed. It's not a command: it's a
- * partial intent, and it travels in the `leapmotor-climate-change` event —
- * never in `ActionPayload` — precisely so there's no way to deliver it to
- * `resolveAction`, which only knows how to work with complete commands. The
- * fan isn't here because it also has its own event (`leapmotor-fan-speed`)
- * and its value lives in the card.
- */
-export interface ClimateChange {
-  temperature?: number
-  recirculate?: boolean
 }
 
 /**
@@ -123,69 +74,6 @@ export function pendingValue<T>(request: PendingRequest<T> | undefined, reported
  */
 export type SeatRequests = Partial<Record<SeatLevelKey, PendingRequest<number>>>
 export type SeatLevels = Partial<Record<SeatLevelKey, number>>
-
-/**
- * Everything the card knows about climate control that the car doesn't
- * report: the still-unconfirmed requests and the fan speed, which the
- * integration doesn't expose at all. Lives in the card, not the panel, which
- * is destroyed on every collapse.
- */
-export interface ClimateIntent {
-  /** What the card last chose. There's no reading at all that confirms it. */
-  fanSpeed: number
-  temperature?: PendingRequest<number>
-  recirculate?: PendingRequest<boolean>
-}
-
-/** What the integration uses when nobody chooses — and what the card shows on open. */
-export const DEFAULT_FAN_SPEED = 3
-
-/** Fallback target when the car doesn't report any temperature. */
-const FALLBACK_TARGET_C = 24
-
-export const TEMP_MIN = 18
-export const TEMP_MAX = 32
-
-/**
- * Decimal places for the temperature target, wherever it appears. It's zero
- * because the command is an integer — `resolveAction` rounds it — and
- * because the stepper moves degree by degree: showing 23.5 in one place and
- * 24 in another, then jumping to 25 in one tap, is what the tile and the
- * panel used to do against each other.
- */
-export const TARGET_TEMP_DECIMALS = 0
-
-/**
- * The target to request when the user taps "+" or "−". Starts from the value
- * they **see** — the displayed one, already rounded to `TARGET_TEMP_DECIMALS`
- * — and not from the raw value, so that one tap is worth exactly one degree
- * from what's on screen.
- */
-export function nextStepTemperature(shown: number | undefined, delta: number): number {
-  const base = Math.round(shown ?? FALLBACK_TARGET_C)
-  return Math.min(TEMP_MAX, Math.max(TEMP_MIN, base + delta))
-}
-
-/**
- * Composes the complete climate command. It's always complete because
- * `leapmotor.set_climate` resets to defaults whatever isn't sent: sending
- * only the temperature would put the fan at 3 and turn recirculation off —
- * the silent defect this whole plan exists to end.
- *
- * Each field comes, in this order: from the user's request that the car
- * hasn't confirmed yet, from the car's reading, and only after both fail does
- * a default come. The fan has no reading at all, so it always comes from the
- * intent.
- */
-export function composeClimateCommand(intent: ClimateIntent, state: VehicleState): ClimateCommand {
-  return {
-    temperature: pendingValue(intent.temperature, state.climate.targetC)
-      ?? state.climate.targetC ?? FALLBACK_TARGET_C,
-    fanSpeed: intent.fanSpeed,
-    recirculate: pendingValue(intent.recirculate, state.climate.recirculating)
-      ?? state.climate.recirculating ?? false,
-  }
-}
 
 /**
  * What to do with a tap on an action, decided without touching the DOM or
@@ -341,14 +229,8 @@ export function shownLevel(
  * worst defects.
  */
 export interface ActionPayload {
-  /** Target sunshade position, 0–10. */
-  position?: number
-  /**
-   * Climate command, always complete — it's what `resolveAction` requires
-   * and what the service receives. The card composes it, from the intent it
-   * keeps accumulating; no control writes here.
-   */
-  climate?: ClimateCommand
+  /** Reserved: no action takes a value any more, but the event shape stays stable. */
+  readonly _?: never
 }
 
 /**
@@ -368,7 +250,7 @@ export function resolveAction(
   action: ActionId,
   state: VehicleState,
   map: EntityMap,
-  payload?: ActionPayload,
+  _payload?: ActionPayload,
 ): ServiceCall | undefined {
   switch (action) {
     case 'unlock':
@@ -380,61 +262,41 @@ export function resolveAction(
       return press(map, state.openings.trunk === true ? 'closeTrunk' : 'openTrunk')
     case 'windows':
       return press(map, anyWindowOpen(state) ? 'closeWindows' : 'openWindows')
-    case 'sunshade': {
-      // The sunshade position isn't exposed as an entity (spec v2 §2.4), so
-      // there's no state to toggle: the user picks the target position.
-      const entityId = vehicleAnchor(map)
-      const position = payload?.position
-      if (!entityId || position === undefined) return undefined
-      const v = clamp(position, 0, 10)
-      return {
-        domain: 'leapmotor',
-        service: v === 0 ? 'sunshade_close' : 'sunshade_open',
-        entityId,
-        entityIdAsField: true,
-        data: { value: v },
-      }
-    }
-    case 'setClimate': {
-      const entityId = vehicleAnchor(map)
-      const cmd = payload?.climate
-      if (!entityId || !cmd) return undefined
-      const temperature = clamp(cmd.temperature, 18, 32)
-      return {
-        domain: 'leapmotor',
-        service: 'set_climate',
-        entityId,
-        entityIdAsField: true,
-        // Always all three: `set_climate` resets to defaults whatever isn't
-        // sent, so sending only the temperature would put the fan at 3 and
-        // turn recirculation off.
-        data: {
-          mode: climateMode(state, temperature),
-          temperature,
-          fan_speed: clamp(cmd.fanSpeed, 1, 7),
-          recirculate: cmd.recirculate,
-        },
-      }
-    }
+    case 'sunshade':
+      // Mate only has open and close for the sunshade (the position it
+      // reports is read-only), so this is a toggle on the roof's state.
+      return press(map, state.openings.roof === true ? 'closeSunshade' : 'openSunshade')
     case 'quickCool': return press(map, 'quickCool')
     case 'quickHeat': return press(map, 'quickHeat')
+    case 'quickVentilation': return press(map, 'quickVentilation')
     case 'defrost': return press(map, 'windshieldDefrost')
     case 'findVehicle': return press(map, 'findVehicle')
     case 'unlockCharger': return press(map, 'unlockCharger')
     case 'refresh': return press(map, 'refreshData')
-    case 'climate': return toggleSwitch(map, 'climateSwitch', state.climate.on)
-    case 'steeringWheelHeat': return toggleSwitch(map, 'steeringWheelHeat', state.comfort.steeringWheelHeat)
-    case 'mirrorHeat': return toggleSwitch(map, 'mirrorHeat', state.comfort.mirrorHeat)
-    case 'batteryPreheat': return toggleSwitch(map, 'batteryPreheat', state.comfort.batteryPreheat)
+    // Auto is the plain "on" (the car picks cooling or heating itself); off
+    // is its own button, which Mate hides on the cars where it does nothing.
+    case 'climate': return state.climate.on === true ? press(map, 'climateOff') : press(map, 'climateAuto')
+    case 'climateOff': return press(map, 'climateOff')
+    case 'steeringWheelHeat': return pressPair(map, 'steeringWheelHeatOn', 'steeringWheelHeatOff', state.comfort.steeringWheelHeat)
+    case 'mirrorHeat': return pressPair(map, 'mirrorHeatOn', 'mirrorHeatOff', state.comfort.mirrorHeat)
+    case 'driverSeatHeat': return pressPair(map, 'driverSeatHeatOn', 'driverSeatHeatOff', seatOn(state.comfort.driverSeatHeat))
+    case 'driverSeatVent': return pressPair(map, 'driverSeatVentOn', 'driverSeatVentOff', seatOn(state.comfort.driverSeatVent))
+    case 'passengerSeatHeat': return pressPair(map, 'passengerSeatHeatOn', 'passengerSeatHeatOff', seatOn(state.comfort.passengerSeatHeat))
+    case 'passengerSeatVent': return pressPair(map, 'passengerSeatVentOn', 'passengerSeatVentOff', seatOn(state.comfort.passengerSeatVent))
+    case 'batteryPreheat': return press(map, 'batteryPreheat')
     case 'setChargeLimit': {
       // Returns the call without `data` on purpose: the value comes from the
       // charging panel's slider, which `onLimit` passes as `extra` to
-      // `doCall`. It's in PAYLOAD_ACTIONS so it can't be used as a row
-      // button, where it would have no way to receive that value.
+      // `doCall`.
       const entityId = map.chargeLimitSet
       return entityId ? { domain: 'number', service: 'set_value', entityId } : undefined
     }
   }
+}
+
+/** A seat level as a plain on/off, `undefined` when the car does not say. */
+function seatOn(level: number | undefined): boolean | undefined {
+  return level === undefined ? undefined : level > 0
 }
 
 export function actionLabel(action: ActionId, state: VehicleState, t: TranslateFn): string {
@@ -465,11 +327,16 @@ export function actionIcon(action: ActionId, state: VehicleState): string {
     case 'unlockCharger': return 'mdi:ev-plug-type2'
     case 'refresh': return 'mdi:refresh'
     case 'climate': return 'mdi:fan'
+    case 'climateOff': return 'mdi:fan-off'
+    case 'quickVentilation': return 'mdi:fan'
+    case 'driverSeatHeat':
+    case 'passengerSeatHeat': return 'mdi:car-seat-heater'
+    case 'driverSeatVent':
+    case 'passengerSeatVent': return 'mdi:car-seat-cooler'
     case 'steeringWheelHeat': return 'mdi:steering'
     case 'mirrorHeat': return 'mdi:car-side'
     case 'batteryPreheat': return 'mdi:battery-heart-variant'
     case 'setChargeLimit': return 'mdi:battery-charging-80'
-    case 'setClimate': return 'mdi:thermometer'
   }
 }
 
@@ -477,50 +344,23 @@ export function actionIcon(action: ActionId, state: VehicleState): string {
 export const BLOCKED_WHILE_DRIVING: ActionId[] = ['unlock', 'lock', 'trunk', 'windows', 'sunshade']
 
 /**
- * The panel the card's expansion can show. Just one, ever since the group
- * grid replaced the tiles: the climate panel became the content of a
- * sub-view and stopped expanding. Keeping members here that `CONTROL_PANEL`
- * — its only producer — doesn't produce would let a comparison that's never
- * true compile forever.
+ * Mate publishes no action that needs a value from a panel, so there is no
+ * expandable panel and every action is a plain button. The type stays so
+ * the card's expansion plumbing keeps one definition.
  */
-export type ExpandPanel = 'sunshade'
+export type ExpandPanel = never
+
+/** Actions whose `resolveAction` needs a value that only a control supplies. */
+export const PAYLOAD_ACTIONS: ActionId[] = ['setChargeLimit']
+
+/** Which panel each action opens, when it opens one at all: none. */
+export const CONTROL_PANEL: Partial<Record<ActionId, ExpandPanel>> = {}
 
 /**
- * Actions whose `resolveAction` requires an `ActionPayload` that only a
- * control supplies. Testing their availability without a payload would
- * always return `undefined`, and not because the action was unavailable.
- */
-export const PAYLOAD_ACTIONS: ActionId[] = ['sunshade', 'setClimate', 'setChargeLimit']
-
-/**
- * Which panel each action opens, when it opens one at all. A value action
- * **without** a panel can't be an action-row button: it has no way to
- * receive the value, and routing it to another action's panel would make a
- * button command something different from what it announces.
- */
-export const CONTROL_PANEL: Partial<Record<ActionId, ExpandPanel>> = { sunshade: 'sunshade' }
-
-/**
- * Minimal payload to answer "is this action available?" without executing
- * it. Only payload actions need an entry here; for the others,
- * `resolveAction` ignores the payload and the answer is the same with or
- * without it.
- */
-const AVAILABILITY_PROBE: Partial<Record<ActionId, ActionPayload>> = {
-  sunshade: { position: 0 },
-  setClimate: { climate: { temperature: 24, fanSpeed: 3, recirculate: false } },
-}
-
-/**
- * Can this action be a button here? For payload actions, use a probe
- * payload, because what matters is whether the vehicle is addressable, not
- * what the user is going to choose — but only when the action also has a
- * panel: without one, the button would have no way to receive that payload.
+ * Can this action be a button here? Payload actions have no panel, so they
+ * cannot be a button even if the car is addressable.
  */
 export function isActionAvailable(action: ActionId, state: VehicleState, map: EntityMap): boolean {
-  const needsPayload = PAYLOAD_ACTIONS.includes(action)
-  // A payload action without a panel can't be used as a button, even if the
-  // vehicle is addressable.
-  if (needsPayload && !CONTROL_PANEL[action]) return false
-  return resolveAction(action, state, map, AVAILABILITY_PROBE[action]) !== undefined
+  if (PAYLOAD_ACTIONS.includes(action)) return false
+  return resolveAction(action, state, map) !== undefined
 }

@@ -1,133 +1,153 @@
+/**
+ * Maps each logical name the card uses to the entity Leapmotor Mate publishes
+ * over MQTT discovery. Mate names its entities in English whatever the
+ * language of Home Assistant, so the entity_id is always
+ * `<domain>.leapmotor_mate_<last six of the VIN>_<slug>` and `slug` below is
+ * the slug of the entity's English name. `slug: null` marks a logical name
+ * Mate does not publish: the card keeps working without it, it just never
+ * resolves.
+ */
+export interface EntityDef { domain: string; slug: string | null }
+
+const e = (domain: string, slug: string | null): EntityDef => ({ domain, slug })
+
 export const ENTITY_KEYS = {
   // identity and range
-  battery: { domain: 'sensor', tk: 'battery_percent' },
-  batteryPrecise: { domain: 'sensor', tk: 'battery_percent_precise' },
-  range: { domain: 'sensor', tk: 'remaining_range_km' },
-  rangeLive: { domain: 'sensor', tk: 'live_remaining_range_km' },
-  rangeMax: { domain: 'sensor', tk: 'wltp_max_range_km' },
-  rangeMode: { domain: 'sensor', tk: 'range_mode' },
-  lastVehicleUpdate: { domain: 'sensor', tk: 'last_vehicle_update' },
-  lastCloudRefresh: { domain: 'sensor', tk: 'last_successful_refresh' },
-  vehiclePicture: { domain: 'image', tk: 'vehicle_picture' },
-  location: { domain: 'device_tracker', tk: 'location' },
+  battery: e('sensor', 'battery'),
+  batteryPrecise: e('sensor', null),
+  range: e('sensor', 'range'),
+  rangeLive: e('sensor', null),
+  rangeMax: e('sensor', null),
+  rangeMode: e('sensor', null),
+  lastVehicleUpdate: e('sensor', 'last_seen'),
+  lastCloudRefresh: e('sensor', 'data_timestamp'),
+  dataAge: e('sensor', 'data_age'),
+  vehiclePicture: e('image', null),
+  location: e('device_tracker', 'location'),
 
   // locks
-  lock: { domain: 'lock', tk: 'vehicle_lock' },
-  lockStateSource: { domain: 'sensor', tk: 'lock_state_source' },
-  lockStateAge: { domain: 'sensor', tk: 'lock_state_age_seconds' },
+  lock: e('lock', 'door_lock'),
+  lockStateSource: e('sensor', null),
+  lockStateAge: e('sensor', null),
 
   // activity
-  vehicleState: { domain: 'sensor', tk: 'vehicle_state' },
-  gear: { domain: 'sensor', tk: 'gear' },
-  speed: { domain: 'sensor', tk: 'speed_kmh' },
-  isDriving: { domain: 'binary_sensor', tk: 'is_driving' },
-  parkingBrake: { domain: 'binary_sensor', tk: 'parking_brake_active' },
-  vehicleReady: { domain: 'binary_sensor', tk: 'vehicle_ready' },
+  vehicleState: e('sensor', 'state'),
+  gear: e('sensor', 'gear'),
+  speed: e('sensor', 'speed'),
+  isDriving: e('binary_sensor', null),
+  parkingBrake: e('binary_sensor', null),
+  vehicleReady: e('binary_sensor', 'ready'),
 
   // charging
-  chargeLimit: { domain: 'sensor', tk: 'charge_limit_percent' },
-  chargeLimitSet: { domain: 'number', tk: 'charge_limit_setting' },
-  isCharging: { domain: 'binary_sensor', tk: 'is_charging' },
-  isPluggedIn: { domain: 'binary_sensor', tk: 'is_plugged_in' },
-  dcCableConnected: { domain: 'binary_sensor', tk: 'dc_cable_connected' },
-  fullyCharged: { domain: 'binary_sensor', tk: 'fully_charged' },
-  chargingConnection: { domain: 'sensor', tk: 'charging_connection_state' },
-  chargingPower: { domain: 'sensor', tk: 'charging_power_kw' },
-  chargingVoltage: { domain: 'sensor', tk: 'charging_voltage_v' },
-  chargingCurrent: { domain: 'sensor', tk: 'charging_current_a' },
-  remainingChargeMinutes: { domain: 'sensor', tk: 'remaining_charge_minutes' },
-  chargingFinishTime: { domain: 'sensor', tk: 'charging_finish_time' },
-  schedulePlanned: { domain: 'binary_sensor', tk: 'charging_planned_enabled' },
-  unlockCharger: { domain: 'button', tk: 'unlock_charger' },
+  chargeLimit: e('number', 'charge_limit'),
+  chargeLimitSet: e('number', 'charge_limit'),
+  isCharging: e('binary_sensor', 'charging'),
+  isPluggedIn: e('binary_sensor', 'plug_connected'),
+  dcCableConnected: e('binary_sensor', null),
+  fullyCharged: e('binary_sensor', null),
+  chargingConnection: e('sensor', null),
+  chargingPower: e('sensor', 'charge_power'),
+  chargingVoltage: e('sensor', 'charge_voltage'),
+  chargingCurrent: e('sensor', 'charge_current'),
+  remainingChargeMinutes: e('sensor', 'charge_time_remaining'),
+  chargingFinishTime: e('sensor', null),
+  schedulePlanned: e('binary_sensor', null),
+  unlockCharger: e('button', 'unlock_charge_cable'),
 
-  // openings
-  doorDriver: { domain: 'binary_sensor', tk: 'driver_door_open' },
-  doorPassenger: { domain: 'binary_sensor', tk: 'passenger_door_open' },
-  doorRearLeft: { domain: 'binary_sensor', tk: 'rear_left_door_open' },
-  doorRearRight: { domain: 'binary_sensor', tk: 'rear_right_door_open' },
-  windowFL: { domain: 'binary_sensor', tk: 'front_left_window_open' },
-  windowFR: { domain: 'binary_sensor', tk: 'front_right_window_open' },
-  windowRL: { domain: 'binary_sensor', tk: 'rear_left_window_open' },
-  windowRR: { domain: 'binary_sensor', tk: 'rear_right_window_open' },
-  windowPosFL: { domain: 'sensor', tk: 'front_left_window_position_percent' },
-  windowPosFR: { domain: 'sensor', tk: 'front_right_window_position_percent' },
-  windowPosRL: { domain: 'sensor', tk: 'rear_left_window_position_percent' },
-  windowPosRR: { domain: 'sensor', tk: 'rear_right_window_position_percent' },
-  trunk: { domain: 'binary_sensor', tk: 'trunk_open' },
-  roof: { domain: 'binary_sensor', tk: 'skylight_open' },
+  // openings (Mate names are physical positions: front left, not "driver")
+  doorDriver: e('binary_sensor', 'door_front_left'),
+  doorPassenger: e('binary_sensor', 'door_front_right'),
+  doorRearLeft: e('binary_sensor', 'door_rear_left'),
+  doorRearRight: e('binary_sensor', 'door_rear_right'),
+  windowFL: e('binary_sensor', 'window_front_left'),
+  windowFR: e('binary_sensor', 'window_front_right'),
+  windowRL: e('binary_sensor', 'window_rear_left'),
+  windowRR: e('binary_sensor', 'window_rear_right'),
+  windowPosFL: e('sensor', null),
+  windowPosFR: e('sensor', null),
+  windowPosRL: e('sensor', null),
+  windowPosRR: e('sensor', null),
+  trunk: e('binary_sensor', 'trunk'),
+  roof: e('binary_sensor', 'sunshade'),
+  sunshadePosition: e('sensor', 'sunshade_position'),
+  openSunshade: e('button', 'open_sunshade'),
+  closeSunshade: e('button', 'close_sunshade'),
 
   // climate
-  climateSwitch: { domain: 'switch', tk: 'climate_control' },
-  climateOn: { domain: 'binary_sensor', tk: 'climate_on' },
-  interiorTemp: { domain: 'sensor', tk: 'interior_temp_c' },
-  targetTemp: { domain: 'sensor', tk: 'climate_set_temp_left_c' },
-  climateMode: { domain: 'sensor', tk: 'climate_mode' },
-  recirculation: { domain: 'binary_sensor', tk: 'air_recirculation' },
+  climateSwitch: e('switch', null),
+  climateOn: e('binary_sensor', 'climate'),
+  interiorTemp: e('sensor', 'inside_temp'),
+  outsideTemp: e('sensor', 'outside_temp'),
+  batteryTemp: e('sensor', 'battery_temp'),
+  targetTemp: e('sensor', 'ac_target'),
+  climateMode: e('sensor', 'climate_mode'),
+  climatePower: e('sensor', 'climate_power'),
+  fanLevel: e('number', 'fan_level'),
+  recirculation: e('switch', 'air_recirculation'),
 
   // buttons
-  openTrunk: { domain: 'button', tk: 'open_trunk' },
-  closeTrunk: { domain: 'button', tk: 'close_trunk' },
-  openWindows: { domain: 'button', tk: 'open_windows' },
-  closeWindows: { domain: 'button', tk: 'close_windows' },
-  quickCool: { domain: 'button', tk: 'quick_cool' },
-  quickHeat: { domain: 'button', tk: 'quick_heat' },
-  windshieldDefrost: { domain: 'button', tk: 'windshield_defrost' },
-  findVehicle: { domain: 'button', tk: 'find_vehicle' },
-  refreshData: { domain: 'button', tk: 'refresh_data' },
+  openTrunk: e('button', 'open_trunk'),
+  closeTrunk: e('button', 'close_trunk'),
+  openWindows: e('button', 'open_windows'),
+  closeWindows: e('button', 'close_windows'),
+  climateAuto: e('button', 'a_c_auto'),
+  climateOff: e('button', 'a_c_off'),
+  quickCool: e('button', 'quick_cool'),
+  quickHeat: e('button', 'quick_heat'),
+  quickVentilation: e('button', 'quick_ventilation'),
+  windshieldDefrost: e('button', 'defrost'),
+  findVehicle: e('button', 'find_car'),
+  refreshData: e('button', null),
 
   // tires
-  tireFL: { domain: 'sensor', tk: 'tire_pressure_front_left_bar' },
-  tireFR: { domain: 'sensor', tk: 'tire_pressure_front_right_bar' },
-  tireRL: { domain: 'sensor', tk: 'tire_pressure_rear_left_bar' },
-  tireRR: { domain: 'sensor', tk: 'tire_pressure_rear_right_bar' },
+  tireFL: e('sensor', 'tyre_fl'),
+  tireFR: e('sensor', 'tyre_fr'),
+  tireRL: e('sensor', 'tyre_rl'),
+  tireRR: e('sensor', 'tyre_rr'),
 
-  // trip
-  odometer: { domain: 'sensor', tk: 'odometer_km' },
-  totalMileage: { domain: 'sensor', tk: 'total_mileage_km' },
-  last7DaysKm: { domain: 'sensor', tk: 'last_7_days_mileage_km' },
-  /*
-   * The energy twin of the sensor above. Both carry the SAME per-day
-   * breakdown in `daily_detail`, which is why `vehicle-state.ts` reads it
-   * from whichever of the two answers first.
-   *
-   * Deliberately absent from the `trip` group's key list in `groups.ts`,
-   * which is the list the missing-entities warning draws from. An
-   * integration that does not publish this sensor is not a misconfiguration
-   * the user can fix by mapping an entity, and the only thing its absence
-   * costs the card is the breakdown — which simply does not render.
-   */
-  last7DaysEnergy: { domain: 'sensor', tk: 'last_7_days_energy_kwh' },
-  avgConsumption6w: { domain: 'sensor', tk: 'average_consumption_6w_kwh_100km' },
-  totalEnergy: { domain: 'sensor', tk: 'total_energy_kwh' },
-  /*
-   * The three slices of the last week's energy. Each one's `state` is its
-   * percentage of the total, but the kWh are not split per entity: all three
-   * carry the SAME three attributes (`driving_energy_kwh`,
-   * `climate_energy_kwh`, `other_energy_kwh`). Hence the card needing all
-   * three keys — one per percentage — and any one of them for the kWh.
-   */
-  lastWeekDrivingPercent: { domain: 'sensor', tk: 'last_week_driving_energy_percent' },
-  lastWeekClimatePercent: { domain: 'sensor', tk: 'last_week_climate_energy_percent' },
-  lastWeekOtherPercent: { domain: 'sensor', tk: 'last_week_other_energy_percent' },
+  // trip: Mate keeps trips in its own database, not in MQTT, so only the odometer is here
+  odometer: e('sensor', 'odometer'),
+  totalMileage: e('sensor', null),
+  last7DaysKm: e('sensor', null),
+  last7DaysEnergy: e('sensor', null),
+  avgConsumption6w: e('sensor', null),
+  totalEnergy: e('sensor', null),
+  lastWeekDrivingPercent: e('sensor', null),
+  lastWeekClimatePercent: e('sensor', null),
+  lastWeekOtherPercent: e('sensor', null),
 
-  // comfort
-  driverSeatHeat: { domain: 'number', tk: 'driver_seat_heating' },
-  driverSeatVent: { domain: 'number', tk: 'driver_seat_ventilation' },
-  passengerSeatHeat: { domain: 'number', tk: 'passenger_seat_heating' },
-  passengerSeatVent: { domain: 'number', tk: 'passenger_seat_ventilation' },
-  steeringWheelHeat: { domain: 'switch', tk: 'steering_wheel_heat' },
-  steeringWheelHeatRemaining: { domain: 'sensor', tk: 'steering_wheel_heating_remaining_minutes' },
-  mirrorHeat: { domain: 'switch', tk: 'rearview_mirror_heat' },
-  batteryPreheat: { domain: 'switch', tk: 'battery_preheat' },
+  // comfort: Mate reports the state in a sensor and commands it with on/off buttons
+  driverSeatHeat: e('sensor', 'seat_heating_driver'),
+  driverSeatVent: e('sensor', 'seat_ventilation_driver'),
+  passengerSeatHeat: e('sensor', 'seat_heating_passenger'),
+  passengerSeatVent: e('sensor', 'seat_ventilation_passenger'),
+  steeringWheelHeat: e('sensor', 'steering_wheel_heat'),
+  steeringWheelHeatRemaining: e('sensor', null),
+  mirrorHeat: e('sensor', 'mirror_heating_left'),
+  batteryPreheat: e('button', 'preheat_battery'),
 
-  // scheduling
-  scheduleSwitch: { domain: 'switch', tk: 'charging_schedule' },
-  scheduleStart: { domain: 'sensor', tk: 'charging_planned_start' },
-  scheduleEnd: { domain: 'sensor', tk: 'charging_planned_end' },
-  scheduleRecurrence: { domain: 'sensor', tk: 'charging_planned_circulation' },
-  scheduleWeekly: { domain: 'binary_sensor', tk: 'charging_planned_weekly' },
-  scheduleCancelledOnce: { domain: 'binary_sensor', tk: 'charging_schedule_cancelled_once' },
-} as const
+  // comfort commands
+  driverSeatHeatOn: e('button', 'driver_seat_heat_on'),
+  driverSeatHeatOff: e('button', 'driver_seat_heat_off'),
+  passengerSeatHeatOn: e('button', 'passenger_seat_heat_on'),
+  passengerSeatHeatOff: e('button', 'passenger_seat_heat_off'),
+  driverSeatVentOn: e('button', 'driver_seat_vent_on'),
+  driverSeatVentOff: e('button', 'driver_seat_vent_off'),
+  passengerSeatVentOn: e('button', 'passenger_seat_vent_on'),
+  passengerSeatVentOff: e('button', 'passenger_seat_vent_off'),
+  steeringWheelHeatOn: e('button', 'steering_heat_on'),
+  steeringWheelHeatOff: e('button', 'steering_heat_off'),
+  mirrorHeatOn: e('button', 'mirror_heat_on'),
+  mirrorHeatOff: e('button', 'mirror_heat_off'),
+
+  // scheduling: Mate exposes the plan as one JSON text entity meant for automations
+  scheduleSwitch: e('switch', null),
+  scheduleStart: e('sensor', null),
+  scheduleEnd: e('sensor', null),
+  scheduleRecurrence: e('sensor', null),
+  scheduleWeekly: e('binary_sensor', null),
+  scheduleCancelledOnce: e('binary_sensor', null),
+} as const satisfies Record<string, EntityDef>
 
 export type LogicalKey = keyof typeof ENTITY_KEYS
 
@@ -148,4 +168,5 @@ export function isSeatLevelKey(key: LogicalKey): key is SeatLevelKey {
   return (SEAT_LEVEL_KEYS as readonly LogicalKey[]).includes(key)
 }
 
-export const INTEGRATION_DOMAIN = 'leapmotor'
+/** Prefix of every entity Mate publishes: `<domain>.leapmotor_mate_<vin6>_<slug>`. */
+export const MATE_PREFIX = 'leapmotor_mate_'
