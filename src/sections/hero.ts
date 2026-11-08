@@ -6,8 +6,7 @@ import { DASH, formatDuration, type TranslateFn } from '../localize'
 import type { TapDecision } from '../tap-action'
 import { batteryColor, sharedStyles } from '../theme'
 import type { ActionId, EntityMap, VehicleState } from '../types'
-import { carSilhouette } from '../car-silhouette'
-import type { CarModel } from '../car-models'
+import { CAR_SILHOUETTE } from '../car-silhouette'
 
 @customElement('leapmotor-mate-hero')
 export class LeapmotorHero extends LitElement {
@@ -24,9 +23,6 @@ export class LeapmotorHero extends LitElement {
   // already handles the "no input URL" case; this prop covers the "URL that
   // fails after mounting" case.
   @property({ type: Boolean }) allowSilhouette = true
-  /** Which Leapmotor to draw when there is no photo, and the tint of its body. */
-  @property({ type: String }) model: CarModel = 'b10'
-  @property({ type: String }) carColor?: string
 
   /**
    * The one-row shape, for when a sub-view is open: name, range, battery and
@@ -208,7 +204,7 @@ export class LeapmotorHero extends LitElement {
         ? html`<div class="image">
             ${this.imageUrl && !this.imageFailed
               ? html`<img src=${this.imageUrl} alt=${this.name} @error=${() => { this.imageFailed = true }} />`
-              : (this.allowSilhouette ? carSilhouette(this.model, this.carColor) : nothing)}
+              : (this.allowSilhouette ? CAR_SILHOUETTE : nothing)}
           </div>`
         : nothing}
 

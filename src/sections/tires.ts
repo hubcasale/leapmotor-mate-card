@@ -1,7 +1,6 @@
 import { LitElement, css, html } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
-import type { CarModel } from '../car-models'
-import { carTopview } from '../car-topview'
+import { CAR_TOPVIEW } from '../car-topview'
 import { formatNumber } from '../format'
 import type { TranslateFn } from '../localize'
 import { sharedStyles } from '../theme'
@@ -25,8 +24,6 @@ export class LeapmotorTires extends LitElement {
    * and not `range` so as not to be confused with the driving range, which
    * in `VehicleState` is also `range`.
    */
-  /** Which Leapmotor to draw under the four pressures. */
-  @property({ type: String }) model: CarModel = 'b10'
   @property({ attribute: false }) limits: readonly [number, number] = DEFAULT_TIRE_RANGE
 
   private outOfRange(v: number | undefined): boolean {
@@ -40,7 +37,7 @@ export class LeapmotorTires extends LitElement {
     return html`<div class="panel">
       <div class="title">${this.t('tires.title')}</div>
       <div class="diagram">
-        <div class="car">${carTopview(this.model)}</div>
+        <div class="car">${CAR_TOPVIEW}</div>
         ${CORNERS.map(c => html`
           <div class="corner ${c.area} ${this.outOfRange(tires[c.key]) ? 'warn' : ''}">
             <div class="pressure">

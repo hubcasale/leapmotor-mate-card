@@ -53,7 +53,7 @@ describe('the card in a DOM', () => {
     expect(customElements.get('leapmotor-mate-card-editor')).toBeDefined()
   })
 
-  it('renders the hero with the drawn B10 and the six group tiles', async () => {
+  it('renders the hero with the car drawing and the six group tiles', async () => {
     const el = await mount()
     expect(el.shadowRoot!.querySelector('ha-card')).not.toBeNull()
     const hero = deep(el.shadowRoot!, 'leapmotor-mate-hero')[0] as HTMLElement
@@ -61,16 +61,6 @@ describe('the card in a DOM', () => {
     expect(hero.shadowRoot!.querySelector('svg[part="silhouette"]')).not.toBeNull()
     const grid = deep(el.shadowRoot!, 'leapmotor-mate-group-grid')[0]!
     expect(grid.shadowRoot!.querySelectorAll('button').length).toBe(6)
-  })
-
-  it('draws a different silhouette for each model', async () => {
-    const shapes = new Set<string>()
-    for (const model of ['b10', 'c10', 'c11', 'c16', 'b05', 't03']) {
-      const el = await mount({ model })
-      const hero = deep(el.shadowRoot!, 'leapmotor-mate-hero')[0] as HTMLElement
-      shapes.add(hero.shadowRoot!.querySelector('svg[part="silhouette"] path')!.getAttribute('d')!)
-    }
-    expect(shapes.size).toBe(6)
   })
 
   it('shows the action row with the buttons Mate publishes', async () => {

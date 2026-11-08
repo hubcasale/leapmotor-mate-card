@@ -5,6 +5,14 @@ Every notable change to this project is recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] — 2026-11-08
+
+### Changed
+
+- The car drawings are the original card's again (side silhouette and top
+  view). The per-model drawings and the `model` and `car_color` options of
+  0.5.0 are removed.
+
 ## [0.5.0] — 2026-11-08
 
 First release of **Leapmotor Mate Card**, a fork of

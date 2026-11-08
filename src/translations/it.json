@@ -135,8 +135,5 @@
   "action.passengerSeatHeat": "Sedile passeggero riscaldato",
   "action.passengerSeatVent": "Sedile passeggero ventilato",
   "trip.outside_temp": "Temperatura esterna",
-  "trip.hint": "I viaggi e i consumi sono nell'interfaccia web di Leapmotor Mate.",
-  "editor.model_auto": "Automatico (B10)",
-  "editor.model": "Modello dell'auto (disegno)",
-  "editor.car_color": "Colore della carrozzeria (es. #8bc34a)"
+  "trip.hint": "I viaggi e i consumi sono nell'interfaccia web di Leapmotor Mate."
 }

@@ -6,7 +6,6 @@ import {
   type ActionEventDetail, type ActionPayload,
   type SeatLevels, type SeatRequests, type ServiceCall,
 } from './actions'
-import { pickModel } from './car-models'
 import { formatUpdated } from './format'
 import {
   GROUP_ORDER, alertFor, estimateCardSize, missingForGroups, resolveGrid, summaryFor,
@@ -37,7 +36,7 @@ import './sections/tires'
 import './sections/trip'
 import './sections/comfort'
 
-export const CARD_VERSION = '0.5.0'
+export const CARD_VERSION = '0.5.1'
 
 
 console.info(
@@ -502,7 +501,7 @@ export class LeapmotorCard extends LitElement {
               .maxLevel=${attr<number>(hass, map, 'driverSeatHeat', 'max') ?? 3}
             ></leapmotor-mate-comfort>`
         case 'tires':
-          return html`<leapmotor-mate-tires .state=${state} .t=${t} .limits=${tireRange} .model=${pickModel(config.model, name)}></leapmotor-mate-tires>`
+          return html`<leapmotor-mate-tires .state=${state} .t=${t} .limits=${tireRange}></leapmotor-mate-tires>`
         case 'trip':
           return html`<leapmotor-mate-trip .state=${state} .t=${t} .language=${language}></leapmotor-mate-trip>`
         case 'location':
@@ -544,7 +543,6 @@ export class LeapmotorCard extends LitElement {
           .state=${state} .t=${t} .now=${now} .name=${name}
           .language=${language} .imageUrl=${imageUrl}
           .showImage=${showImage} .allowSilhouette=${allowSilhouette}
-          .model=${pickModel(config.model, name)} .carColor=${config.car_color}
           .compact=${openGroup !== undefined}
           .rangeTap=${rangeTap} .map=${map} .pending=${this._pending}
         ></leapmotor-mate-hero>

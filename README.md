@@ -8,16 +8,13 @@ grid of groups — battery and charging, status, climate, tyres, trip and
 location — each opening in place of the grid.
 
 It is built for **[Leapmotor Mate](https://github.com/ProtossBlaster/leapmotor-mate)**
-(the MQTT → Home Assistant bridge) and works with the **Leapmotor B10**; the
-C10, C11, C16, B05 and T03 are drawn too.
+(the MQTT → Home Assistant bridge) and works with the **Leapmotor B10**.
 
 This is a fork of [fapgomes/ha-leapmotor-card](https://github.com/fapgomes/ha-leapmotor-card),
 which was written for the `kerniger/leapmotor-ha` integration. The entity
-layer, the actions and the climate panel were rewritten for Mate; the layout,
-the groups and the structure are the original author's work. Licence:
+layer, the actions and the climate panel were rewritten for Mate; the look —
+layout, groups, drawings — is the original author's work. Licence:
 GPL-3.0, like the original.
-
-![The drawn cars: B10, C10, C11, C16, B05 and T03, from the side and from above](images/models.png)
 
 ## Requirements
 
@@ -61,8 +58,6 @@ That is all: the card finds your car by itself. A fuller example:
 ```yaml
 type: custom:leapmotor-mate-card
 name: My B10
-model: b10
-car_color: "#8bc34a"
 language: en
 actions: [unlock, lock, trunk, windows, findVehicle, sunshade]
 confirm_actions: [unlock]
@@ -74,10 +69,8 @@ tire_range: [2.0, 2.6]
 | --- | --- | --- |
 | `device` | *(automatic)* | The car's id — the last six characters of its VIN, as in `leapmotor_mate_5r1234_…` — or the whole prefix, or any entity of the car. Only needed with more than one Leapmotor car. |
 | `name` | the device name | Name shown in the header. |
-| `model` | `b10` | The car drawn: `b10`, `c10`, `c11`, `c16`, `b05`, `t03`. Mate does not tell Home Assistant the model, so this cannot be detected; if `model` is missing the card looks for it in `name`. |
-| `car_color` | none | Tint of the drawn body, a plain CSS colour (`#8bc34a`, `silver`). |
 | `language` | Home Assistant's | `en`, `it` or `pt`. |
-| `image` | `auto` | `auto` shows the drawing (or a picture entity if you map one), `entity` only a picture, `none` nothing, or a URL of your own photo. |
+| `image` | `auto` | `auto` shows the drawn silhouette (or a picture entity if you map one), `entity` only a picture, `none` nothing, or a URL of your own photo. |
 | `actions` | `[unlock, lock, trunk, windows, findVehicle, sunshade]` | The buttons of the action row — see below. |
 | `confirm_actions` | `[unlock]` | Actions that ask for confirmation first. |
 | `grid` | all groups | Which groups the grid shows, and in what order. An entry is a group name or `{group, icon, title, summary}`. |
@@ -163,7 +156,7 @@ Releases are built by the `build` workflow when a `v*` tag is pushed.
 
 Original card by [fapgomes](https://github.com/fapgomes/ha-leapmotor-card);
 car data by [Leapmotor Mate](https://github.com/ProtossBlaster/leapmotor-mate)
-(ProtossBlaster). The car drawings are original and generated from approximate
-dimensions; the project does not distribute Leapmotor artwork.
+(ProtossBlaster). The car drawings are the original card's and do not use
+Leapmotor artwork.
 
 GPL-3.0-or-later — see [LICENSE](LICENSE).

@@ -1,4 +1,3 @@
-import { CAR_MODELS } from './car-models'
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state as internalState } from 'lit/decorators.js'
 import type { HomeAssistant } from './ha-types'
@@ -71,14 +70,6 @@ export class LeapmotorCardEditor extends LitElement {
       { name: 'device', selector: { text: {} } },
       { name: 'name', selector: { text: {} } },
       {
-        name: 'model',
-        selector: { select: { mode: 'dropdown', options: [
-          { value: '', label: t('editor.model_auto') },
-          ...Object.entries(CAR_MODELS).map(([value, m]) => ({ value, label: `Leapmotor ${m.name}` })),
-        ] } },
-      },
-      { name: 'car_color', selector: { text: {} } },
-      {
         name: 'language',
         // The language names stay in their own language, by convention for
         // language selectors — "Português" is not translated to English.
@@ -133,8 +124,6 @@ export class LeapmotorCardEditor extends LitElement {
    */
   private computeLabel = (t: (k: string) => string) => (s: { name: string }): string => {
     if (s.name === 'map_zoom') return t('editor.map_zoom')
-    if (s.name === 'model') return t('editor.model')
-    if (s.name === 'car_color') return t('editor.car_color')
     if (s.name === 'tire_range') return t('editor.tire_range')
     if (s.name === 'range_tap_action') return t('editor.range_tap_action')
     return s.name
@@ -143,8 +132,6 @@ export class LeapmotorCardEditor extends LitElement {
   private valueChanged(e: CustomEvent<{ value: Record<string, unknown> }>) {
     const raw = { ...e.detail.value }
     if (raw.language === '') delete raw.language
-    if (raw.model === '') delete raw.model
-    if (raw.car_color === '') delete raw.car_color
     // `sections` no longer exists in the type, but it may exist in
     // configurations that have not been migrated yet — `ha-form` returns
     // everything it was given, so it is here, in the editor, that the dead
