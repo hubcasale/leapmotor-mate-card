@@ -17,6 +17,8 @@ azioni e il pannello del clima sono stati riscritti per Mate; l'aspetto
 — impostazione, gruppi, disegni — è opera dell'autore originale. Licenza:
 GPL-3.0, come l'originale.
 
+![I disegni della scheda: sagoma di profilo e vista dall'alto con le pressioni dei pneumatici](images/drawings.png)
+
 ## Requisiti
 
 - **Leapmotor Mate**, collegato al tuo account Leapmotor, con

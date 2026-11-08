@@ -16,6 +16,8 @@ layer, the actions and the climate panel were rewritten for Mate; the look —
 layout, groups, drawings — is the original author's work. Licence:
 GPL-3.0, like the original.
 
+![The card's drawings: side silhouette and top view with tyre pressures](images/drawings.png)
+
 ## Requirements
 
 - **Leapmotor Mate**, connected to your Leapmotor account, with
