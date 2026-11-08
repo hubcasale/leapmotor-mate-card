@@ -5,6 +5,15 @@ Every notable change to this project is recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.5.2] — 2026-11-08
+
+### Added
+
+- **The car's own picture.** New option `mate_url` (the address of Mate's web
+  interface): `image: auto` then shows `<mate_url>/api/car-picture`, the
+  picture the Leapmotor app shows in the car's colour, and falls back to the
+  drawing if it cannot be loaded. Also in the visual editor.
+
 ## [0.5.1] — 2026-11-08
 
 ### Changed

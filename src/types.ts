@@ -39,6 +39,11 @@ export interface LeapmotorCardConfig {
   device?: string
   name?: string
   language?: string
+  /**
+   * Address of Leapmotor Mate's web interface (`http://192.168.1.10:4000`). With
+   * it, `image: auto` shows the car's own picture from `<mate_url>/api/car-picture`.
+   */
+  mate_url?: string
   image?: 'auto' | 'entity' | 'none' | string
   actions?: ActionId[]
   confirm_actions?: ActionId[]

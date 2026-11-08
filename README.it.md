@@ -72,8 +72,9 @@ tire_range: [2.0, 2.6]
 | --- | --- | --- |
 | `device` | *(automatico)* | L'id dell'auto — gli ultimi sei caratteri del VIN, come in `leapmotor_mate_5r1234_…` — oppure il prefisso intero, o una qualsiasi entità dell'auto. Serve solo con più di un'auto Leapmotor. |
 | `name` | il nome del dispositivo | Nome mostrato nell'intestazione. |
+| `mate_url` | nessuno | Indirizzo dell'interfaccia web di Mate, per esempio `http://192.168.1.10:4000`. Con questo l'intestazione mostra la foto vera dell'auto — vedi sotto. |
 | `language` | quella di Home Assistant | `en`, `it` o `pt`. |
-| `image` | `auto` | `auto` mostra la sagoma disegnata (o un'entità immagine, se ne indichi una), `entity` solo un'immagine, `none` niente, oppure l'indirizzo della tua foto. |
+| `image` | `auto` | `auto` mostra la foto dell'auto da Mate se `mate_url` è indicato, altrimenti la sagoma disegnata, `entity` solo un'immagine, `none` niente, oppure l'indirizzo della tua foto. |
 | `actions` | `[unlock, lock, trunk, windows, findVehicle, sunshade]` | I pulsanti della riga di azioni — vedi sotto. |
 | `confirm_actions` | `[unlock]` | Azioni che chiedono conferma prima. |
 | `grid` | tutti i gruppi | Quali gruppi mostra la griglia e in che ordine. Una voce è il nome di un gruppo oppure `{group, icon, title, summary}`. |
@@ -81,6 +82,29 @@ tire_range: [2.0, 2.6]
 | `map_zoom` | `15` | Zoom della mappa della posizione. |
 | `range_tap_action` | `more-info` | Cosa fa un tocco sull'autonomia (vocabolario delle azioni di Home Assistant). |
 | `entities` | nessuno | Sostituisce l'entità usata da un nome logico — vedi sotto. |
+
+### La foto dell'auto
+
+Mate serve la foto vera della tua auto — quella che mostra l'app Leapmotor, nel
+colore della tua auto — all'indirizzo `/api/car-picture` della sua interfaccia
+web. Indica `mate_url` e l'intestazione la mostra; se non si riesce a
+caricarla, la scheda torna al disegno.
+
+```yaml
+type: custom:leapmotor-mate-card
+mate_url: http://192.168.1.10:4000
+```
+
+L'indirizzo lo apre **il tuo browser**, non Home Assistant, quindi deve essere
+raggiungibile da dove guardi la dashboard. Due casi in cui non si carica:
+
+- Home Assistant è su `https` e Mate su `http` semplice: i browser lo
+  bloccano. Servi anche Mate in `https`, oppure usa l'opzione qui sotto.
+- Mate ha una password: la foto richiede il cookie di accesso. Usa l'opzione
+  qui sotto.
+
+**In entrambi i casi:** apri una volta `http://<mate>:4000/api/car-picture`,
+salva l'immagine in `config/www/b10.png` e imposta `image: /local/b10.png`.
 
 ### Azioni
 

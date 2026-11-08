@@ -71,8 +71,9 @@ tire_range: [2.0, 2.6]
 | --- | --- | --- |
 | `device` | *(automatic)* | The car's id — the last six characters of its VIN, as in `leapmotor_mate_5r1234_…` — or the whole prefix, or any entity of the car. Only needed with more than one Leapmotor car. |
 | `name` | the device name | Name shown in the header. |
+| `mate_url` | none | Address of Mate's web interface, e.g. `http://192.168.1.10:4000`. With it the header shows the car's own picture — see below. |
 | `language` | Home Assistant's | `en`, `it` or `pt`. |
-| `image` | `auto` | `auto` shows the drawn silhouette (or a picture entity if you map one), `entity` only a picture, `none` nothing, or a URL of your own photo. |
+| `image` | `auto` | `auto` shows the car's picture from Mate if `mate_url` is set, else the drawn silhouette, `entity` only a picture, `none` nothing, or a URL of your own photo. |
 | `actions` | `[unlock, lock, trunk, windows, findVehicle, sunshade]` | The buttons of the action row — see below. |
 | `confirm_actions` | `[unlock]` | Actions that ask for confirmation first. |
 | `grid` | all groups | Which groups the grid shows, and in what order. An entry is a group name or `{group, icon, title, summary}`. |
@@ -80,6 +81,29 @@ tire_range: [2.0, 2.6]
 | `map_zoom` | `15` | Zoom of the location map. |
 | `range_tap_action` | `more-info` | What a tap on the range does (Home Assistant's action vocabulary). |
 | `entities` | none | Overrides which entity a logical name uses — see below. |
+
+### The car's picture
+
+Mate serves the car's own picture — the one the Leapmotor app shows, in your
+car's colour — at `/api/car-picture` of its web interface. Set `mate_url` and
+the header shows it; if it cannot be loaded the card falls back to the drawing.
+
+```yaml
+type: custom:leapmotor-mate-card
+mate_url: http://192.168.1.10:4000
+```
+
+The address is opened by **your browser**, not by Home Assistant, so it must be
+reachable from where you look at the dashboard. Two cases where it will not
+load:
+
+- Home Assistant is on `https` and Mate on plain `http`: browsers block that.
+  Serve Mate over `https` too, or use the next option.
+- Mate has a password set: the picture needs the login cookie. Use the next
+  option.
+
+**Either way:** open `http://<mate>:4000/api/car-picture` once, save the image
+to `config/www/b10.png` and set `image: /local/b10.png`.
 
 ### Actions
 

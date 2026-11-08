@@ -36,7 +36,7 @@ import './sections/tires'
 import './sections/trip'
 import './sections/comfort'
 
-export const CARD_VERSION = '0.5.1'
+export const CARD_VERSION = '0.5.2'
 
 
 console.info(
@@ -309,7 +309,13 @@ export class LeapmotorCard extends LitElement {
     if (mode !== 'auto' && mode !== 'entity') return mode
     const hass = this._hass
     if (!hass) return undefined
-    return attr<string>(hass, map, 'vehiclePicture', 'entity_picture')
+    const fromEntity = attr<string>(hass, map, 'vehiclePicture', 'entity_picture')
+    if (fromEntity) return fromEntity
+    // Mate's web interface serves the car's own picture, the one the app shows
+    // (in the car's colour): that is the photo in `auto` mode when `mate_url`
+    // says where Mate lives. `entity` mode asks for a picture entity only.
+    const mate = this._config?.mate_url?.trim()
+    return mode === 'auto' && mate ? `${mate.replace(/\/+$/, '')}/api/car-picture` : undefined
   }
 
   /**

@@ -135,5 +135,6 @@
   "action.passengerSeatHeat": "Passenger seat heating",
   "action.passengerSeatVent": "Passenger seat ventilation",
   "trip.outside_temp": "Outside temperature",
-  "trip.hint": "Trips and consumption are in the Leapmotor Mate web interface."
+  "trip.hint": "Trips and consumption are in the Leapmotor Mate web interface.",
+  "editor.mate_url": "Address of the Leapmotor Mate web interface (for the car picture)"
 }

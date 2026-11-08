@@ -63,6 +63,16 @@ describe('the card in a DOM', () => {
     expect(grid.shadowRoot!.querySelectorAll('button').length).toBe(6)
   })
 
+  it('shows the car\'s own picture from Mate when mate_url is set, and the drawing otherwise', async () => {
+    const withUrl = await mount({ mate_url: 'http://192.168.1.10:4000/' })
+    const hero = deep(withUrl.shadowRoot!, 'leapmotor-mate-hero')[0] as HTMLElement
+    expect(hero.shadowRoot!.querySelector('img')?.getAttribute('src')).toBe('http://192.168.1.10:4000/api/car-picture')
+    const without = await mount()
+    const hero2 = deep(without.shadowRoot!, 'leapmotor-mate-hero')[0] as HTMLElement
+    expect(hero2.shadowRoot!.querySelector('img')).toBeNull()
+    expect(hero2.shadowRoot!.querySelector('svg[part="silhouette"]')).not.toBeNull()
+  })
+
   it('shows the action row with the buttons Mate publishes', async () => {
     const el = await mount()
     const row = deep(el.shadowRoot!, 'leapmotor-mate-actions-row')[0] as HTMLElement

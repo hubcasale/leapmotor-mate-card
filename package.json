@@ -1,6 +1,6 @@
 {
   "name": "leapmotor-mate-card",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Lovelace card for Leapmotor vehicles in Home Assistant, built for Leapmotor Mate",
   "license": "GPL-3.0-or-later",
   "repository": {

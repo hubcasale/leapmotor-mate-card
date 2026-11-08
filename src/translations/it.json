@@ -135,5 +135,6 @@
   "action.passengerSeatHeat": "Sedile passeggero riscaldato",
   "action.passengerSeatVent": "Sedile passeggero ventilato",
   "trip.outside_temp": "Temperatura esterna",
-  "trip.hint": "I viaggi e i consumi sono nell'interfaccia web di Leapmotor Mate."
+  "trip.hint": "I viaggi e i consumi sono nell'interfaccia web di Leapmotor Mate.",
+  "editor.mate_url": "Indirizzo dell'interfaccia web di Leapmotor Mate (per la foto dell'auto)"
 }
