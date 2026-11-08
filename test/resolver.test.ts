@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ENTITY_KEYS, type EntityDef, type LogicalKey } from '../src/keys'
 import { resolveEntities } from '../src/resolver'
+import type { EntityRegistryEntry } from '../src/ha-types'
 import { fakeHass } from './helpers/fake-hass'
 import { CAR, id, mateSpecs } from './fixtures/mate-states'
 
@@ -121,9 +122,73 @@ describe('ENTITY_KEYS', () => {
     expect(shared).toEqual(['chargeLimit+chargeLimitSet'])
   })
 
+  it('gives every entity Mate publishes its internal key, the tail of its unique_id', () => {
+    const without = (Object.entries(ENTITY_KEYS) as [LogicalKey, EntityDef][]).filter(([, d]) => d.slug !== null && !d.key).map(([k]) => k)
+    expect(without).toEqual([])
+  })
+
   it('uses only slugs made of lowercase letters, digits and underscores', () => {
     for (const [key, def] of Object.entries(ENTITY_KEYS) as [LogicalKey, EntityDef][]) {
       if (def.slug !== null) expect(def.slug, key).toMatch(/^[a-z0-9_]+$/)
     }
+  })
+})
+
+describe('resolveEntities — by the stable unique_id', () => {
+  const VIN = 'LFZ7N0000005R1234'
+  const reg = (entity_id: string, key: string, platform = 'mqtt'): EntityRegistryEntry =>
+    ({ entity_id, platform, unique_id: `leapmotor_mate_${VIN.toLowerCase()}_${key}`, device_id: 'dev1' })
+
+  it('finds an entity that kept the id of an older Mate (door_driver, not door_front_left)', () => {
+    const specs = mateSpecs({ 'binary_sensor/door_front_left': null })
+    specs.push({ entity_id: id('binary_sensor', 'door_driver'), state: 'on' })
+    const hass = fakeHass(specs)
+    // by entity_id alone the front-left door is lost…
+    expect(resolveEntities(hass, CONFIG).map.doorDriver).toBeUndefined()
+    // …with the registry it is found by its unique_id.
+    const r = resolveEntities(hass, CONFIG, [reg(id('binary_sensor', 'door_driver'), 'door_driver')])
+    expect(r.map.doorDriver).toBe(id('binary_sensor', 'door_driver'))
+    expect(r.missing).not.toContain('doorDriver')
+  })
+
+  it('finds entities the user renamed to anything', () => {
+    const specs = mateSpecs({ 'sensor/battery': null })
+    specs.push({ entity_id: 'sensor.la_mia_b10_batteria', state: '70' })
+    const r = resolveEntities(fakeHass(specs), CONFIG, [reg('sensor.la_mia_b10_batteria', 'soc')])
+    expect(r.map.battery).toBe('sensor.la_mia_b10_batteria')
+  })
+
+  it('tells apart entities of different domains that share a key', () => {
+    const specs = [...mateSpecs(), { entity_id: 'switch.x_trunk', state: 'off' }]
+    const r = resolveEntities(fakeHass(specs), CONFIG, [reg('switch.x_trunk', 'trunk'), reg(id('binary_sensor', 'trunk'), 'trunk_open')])
+    expect(r.map.trunk).toBe(id('binary_sensor', 'trunk'))
+  })
+
+  it('prefers the unique_id over a look-alike entity_id', () => {
+    const specs = [...mateSpecs(), { entity_id: 'sensor.mine_range', state: '300' }]
+    const r = resolveEntities(fakeHass(specs), CONFIG, [reg('sensor.mine_range', 'range')])
+    expect(r.map.range).toBe('sensor.mine_range')
+  })
+
+  it('ignores entries of other platforms and entities that no longer exist', () => {
+    const r = resolveEntities(fakeHass(mateSpecs()), CONFIG, [
+      reg('sensor.other', 'soc', 'zha'), reg('sensor.gone', 'range'),
+    ])
+    expect(r.map.battery).toBe(id('sensor', 'battery'))
+    expect(r.map.range).toBe(id('sensor', 'range'))
+  })
+
+  it('still resolves by entity_id when the registry cannot be read', () => {
+    expect(resolveEntities(fakeHass(mateSpecs()), CONFIG, []).map.battery).toBe(id('sensor', 'battery'))
+    expect(resolveEntities(fakeHass(mateSpecs()), CONFIG, undefined).map.battery).toBe(id('sensor', 'battery'))
+  })
+
+  it('finds a car whose every entity was renamed', () => {
+    const specs = [{ entity_id: 'sensor.b10_batteria', state: '70' }, { entity_id: 'lock.b10_porte', state: 'locked' }]
+    const r = resolveEntities(fakeHass(specs), CONFIG, [reg('sensor.b10_batteria', 'soc'), reg('lock.b10_porte', 'door_lock')])
+    expect(r.error).toBeUndefined()
+    expect(r.deviceId).toBe('5r1234')
+    expect(r.map.battery).toBe('sensor.b10_batteria')
+    expect(r.map.lock).toBe('lock.b10_porte')
   })
 })

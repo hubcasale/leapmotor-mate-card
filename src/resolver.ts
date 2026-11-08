@@ -1,4 +1,4 @@
-import type { HomeAssistant } from './ha-types'
+import type { EntityRegistryEntry, HomeAssistant } from './ha-types'
 import { ENTITY_KEYS, MATE_PREFIX, type EntityDef, type LogicalKey } from './keys'
 import type { EntityMap, LeapmotorCardConfig } from './types'
 
@@ -27,6 +27,25 @@ export interface ResolveResult {
 const ENTITY_ID = new RegExp(`^([a-z_]+)\\.${MATE_PREFIX}([a-z0-9]+)_(.+)$`)
 
 interface Found { domain: string; slug: string; entityId: string }
+
+/** `<prefix>_mate_<VIN, 17 characters>_<key>`: the unique_id Mate gives every entity it publishes. */
+const UNIQUE_ID = /^.+_mate_([a-z0-9]{17})_(.+)$/i
+
+/** `car id → "domain/mateKey" → entity_id`, for the entities that exist in `hass.states`. */
+function byUniqueId(hass: HomeAssistant, registry: EntityRegistryEntry[] | undefined): Map<string, Map<string, string>> {
+  const cars = new Map<string, Map<string, string>>()
+  for (const r of registry ?? []) {
+    if (r.platform !== 'mqtt' || !r.unique_id || !hass.states[r.entity_id]) continue
+    const m = UNIQUE_ID.exec(r.unique_id)
+    if (!m) continue
+    const id = m[1]!.slice(-6).toLowerCase()
+    const domain = r.entity_id.split('.')[0]!
+    const keys = cars.get(id) ?? new Map<string, string>()
+    keys.set(`${domain}/${m[2]!.toLowerCase()}`, r.entity_id)
+    cars.set(id, keys)
+  }
+  return cars
+}
 
 function carsIn(hass: HomeAssistant): Map<string, Found[]> {
   const cars = new Map<string, Found[]>()
@@ -61,8 +80,18 @@ function pickCar(hass: HomeAssistant, cars: Map<string, Found[]>, wanted: string
   return undefined
 }
 
-export function resolveEntities(hass: HomeAssistant, config: LeapmotorCardConfig): ResolveResult {
+export function resolveEntities(
+  hass: HomeAssistant,
+  config: LeapmotorCardConfig,
+  registry?: EntityRegistryEntry[],
+): ResolveResult {
   const cars = carsIn(hass)
+  const stable = byUniqueId(hass, registry)
+  // A car whose entities were renamed has no `leapmotor_mate_…` entity_id left;
+  // its unique_ids still name it.
+  for (const [id, keys] of stable) {
+    if (!cars.has(id)) cars.set(id, [...keys.values()].map(entityId => ({ domain: entityId.split('.')[0]!, slug: '', entityId })))
+  }
   const candidates = [...cars].map(([id, found]) => ({ id, name: nameOf(hass, id, found) }))
   const empty = (error: ResolveError): ResolveResult =>
     ({ map: {}, missing: [], error, candidates })
@@ -86,7 +115,8 @@ export function resolveEntities(hass: HomeAssistant, config: LeapmotorCardConfig
   const missing: LogicalKey[] = []
   for (const [key, def] of Object.entries(ENTITY_KEYS) as [LogicalKey, EntityDef][]) {
     if (def.slug === null) continue
-    const entityId = byDomainSlug.get(`${def.domain}/${def.slug}`)
+    const entityId = (def.key && stable.get(id!)?.get(`${def.domain}/${def.key}`))
+      || byDomainSlug.get(`${def.domain}/${def.slug}`)
     if (entityId) map[key] = entityId
     else missing.push(key)
   }

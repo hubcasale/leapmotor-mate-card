@@ -11,8 +11,8 @@ import {
   GROUP_ORDER, alertFor, estimateCardSize, missingForGroups, resolveGrid, summaryFor,
   type ResolvedGroup,
 } from './groups'
-import type { HomeAssistant } from './ha-types'
-import { SEAT_LEVEL_KEYS, type LogicalKey, type SeatLevelKey } from './keys'
+import type { EntityRegistryEntry, HomeAssistant } from './ha-types'
+import { ENTITY_KEYS, SEAT_LEVEL_KEYS, type LogicalKey, type SeatLevelKey } from './keys'
 import { createTranslator, pickLanguage, type TranslateFn } from './localize'
 import { resolveEntities, type ResolveResult } from './resolver'
 import type { GridTile, LeapmotorGroupGrid } from './sections/group-grid'
@@ -36,7 +36,7 @@ import './sections/tires'
 import './sections/trip'
 import './sections/comfort'
 
-export const CARD_VERSION = '0.5.2'
+export const CARD_VERSION = '0.5.3'
 
 
 console.info(
@@ -61,6 +61,12 @@ console.info(
  */
 const CORE_KEYS: LogicalKey[] = ['battery', 'lock']
 
+/** Where a missing logical name was looked for, to show in the warning so it can be mapped under `entities:`. */
+function expectedEntity(key: LogicalKey, carId?: string): string {
+  const def = ENTITY_KEYS[key] as { domain: string; slug: string | null }
+  return def.slug ? `${def.domain}.leapmotor_mate_${carId ?? '<id>'}_${def.slug}` : '—'
+}
+
 @customElement('leapmotor-mate-card')
 export class LeapmotorCard extends LitElement {
   @internalState() private _hass?: HomeAssistant
@@ -80,7 +86,14 @@ export class LeapmotorCard extends LitElement {
    */
   private _seatRequests: SeatRequests = {}
 
-  private _resolveCache?: { count: number; entities: unknown; config: unknown; result: ResolveResult }
+  /**
+   * Mate's entities by their stable unique_id, read once from the entity
+   * registry. Reading it needs an administrator; for anyone else the call
+   * fails and the card resolves by entity_id alone, as it always could.
+   */
+  @internalState() private _registry?: EntityRegistryEntry[]
+  private _registryRequested = false
+  private _resolveCache?: { count: number; entities: unknown; config: unknown; registry: unknown; result: ResolveResult }
   private _mapElement?: HTMLElement
   private _mapRequested = false
   private _mapRequest?: MapRequest
@@ -206,12 +219,19 @@ export class LeapmotorCard extends LitElement {
     // at one comparison instead of a scan of every entity in the house.
     const count = Object.keys(hass.states).length
     const cache = this._resolveCache
-    if (cache && cache.count === count && cache.entities === hass.entities && cache.config === config) {
+    if (cache && cache.count === count && cache.entities === hass.entities && cache.config === config && cache.registry === this._registry) {
       return cache.result
     }
 
-    const result = resolveEntities(hass, config)
-    this._resolveCache = { count, entities: hass.entities, config, result }
+    if (!this._registryRequested) {
+      this._registryRequested = true
+      hass.callWS<EntityRegistryEntry[]>({ type: 'config/entity_registry/list' })
+        .then(all => { this._registry = all.filter(e => e.platform === 'mqtt'); this._resolveCache = undefined })
+        .catch(() => { this._registry = [] })
+    }
+
+    const result = resolveEntities(hass, config, this._registry)
+    this._resolveCache = { count, entities: hass.entities, config, registry: this._registry, result }
 
     return result
   }
@@ -593,9 +613,9 @@ export class LeapmotorCard extends LitElement {
           const unique = [...new Set(missing)]
           return unique.length === 0
             ? nothing
-            : html`<div class="missing muted" title=${t('missing_entity', { keys: unique.join(', ') })}>
+            : html`<div class="missing muted" title=${unique.map(key => `${key}: ${expectedEntity(key, result.deviceId)}`).join('\n')}>
                 <ha-icon icon="mdi:alert-outline"></ha-icon>
-                ${t('missing_entity_count', { count: unique.length })}
+                ${t('missing_entity_list', { count: unique.length, keys: unique.join(', ') })}
               </div>`
         })()}
       </div>

@@ -146,6 +146,22 @@ sunshade), `climate`, `tires`, `trip`, `location`. Each tile shows one line;
 - Commands are not instantaneous: the car has to wake up and Mate polls the
   cloud at intervals, so the new state can take a minute.
 
+### Entities the card says are missing
+
+The warning at the bottom of the card lists them by name; hover it to see the
+entity id each one was looked for under. The card finds entities two ways:
+
+1. **By Mate's own key**, read from the entity registry (Home Assistant's
+   `unique_id`, `…_mate_<VIN>_door_driver`). This survives renamed entity ids,
+   and the older ids Home Assistant keeps for entities created by an earlier
+   Mate (`door_driver` where today's name would give `door_front_left`). Reading
+   the registry needs an administrator account.
+2. **By entity id**, `<domain>.leapmotor_mate_<id>_<name>`, for everyone.
+
+What is still listed is an entity Mate does not publish for your car (Mate hides
+the commands that do not work on it, and the temperatures a car never
+reports). To use some other entity in its place, map it:
+
 ### Entity overrides
 
 `entities:` replaces the entity behind a logical name, for a renamed entity

@@ -5,6 +5,22 @@ Every notable change to this project is recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.5.3] — 2026-11-08
+
+### Fixed
+
+- **Entities reported missing that exist.** Home Assistant keeps the entity id
+  an entity was created with, so a car set up on an older Mate has
+  `…_door_driver`, `…_window_fl` and similar where the card looked for today's
+  names. Entities are now found by Mate's own key, the tail of the MQTT
+  `unique_id`, read from the entity registry (administrators only; everyone
+  else keeps the lookup by entity id). It also finds entities that were renamed.
+
+### Changed
+
+- The missing-entities warning now lists the names, and its tooltip gives the
+  entity id each was looked for under, so it can be mapped under `entities:`.
+
 ## [0.5.2] — 2026-11-08
 
 ### Added

@@ -136,5 +136,6 @@
   "action.passengerSeatVent": "Ventilação do banco do passageiro",
   "trip.outside_temp": "Temperatura exterior",
   "trip.hint": "As viagens e o consumo estão na interface web do Leapmotor Mate.",
-  "editor.mate_url": "Endereço da interface web do Leapmotor Mate (para a foto do carro)"
+  "editor.mate_url": "Endereço da interface web do Leapmotor Mate (para a foto do carro)",
+  "missing_entity_list": "{count} entidades em falta: {keys}"
 }

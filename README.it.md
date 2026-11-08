@@ -148,6 +148,23 @@ tile mostra una riga; `summary:` sceglie quale — per la batteria `charge`
 - I comandi non sono istantanei: l'auto deve svegliarsi e Mate interroga il
   cloud a intervalli, quindi il nuovo stato può richiedere un minuto.
 
+### Entità che la scheda dice mancanti
+
+L'avviso in fondo alla scheda le elenca per nome; passandoci sopra col mouse si
+vede l'entity id con cui è stata cercata ciascuna. La scheda trova le entità in
+due modi:
+
+1. **Con la chiave interna di Mate**, letta dal registro delle entità (lo
+   `unique_id` di Home Assistant, `…_mate_<VIN>_door_driver`). Resiste agli
+   entity id rinominati e ai vecchi id che Home Assistant conserva per le
+   entità create da un Mate precedente (`door_driver` dove oggi il nome darebbe
+   `door_front_left`). Leggere il registro richiede un account amministratore.
+2. **Con l'entity id**, `<dominio>.leapmotor_mate_<id>_<nome>`, per tutti.
+
+Ciò che resta nell'elenco è un'entità che Mate non pubblica per la tua auto
+(Mate nasconde i comandi che non funzionano e le temperature che l'auto non
+comunica mai). Per usare al suo posto un'altra entità, falla corrispondere:
+
 ### Sostituire le entità
 
 `entities:` sostituisce l'entità dietro un nome logico, per un entity_id

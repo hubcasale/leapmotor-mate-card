@@ -73,6 +73,13 @@ describe('the card in a DOM', () => {
     expect(hero2.shadowRoot!.querySelector('svg[part="silhouette"]')).not.toBeNull()
   })
 
+  it('names the missing entities and where it looked for them', async () => {
+    const el = await mount({}, { 'lock/door_lock': null })
+    const missing = el.shadowRoot!.querySelector('.missing') as HTMLElement
+    expect(missing.textContent).toContain('lock')
+    expect(missing.getAttribute('title')).toContain('lock: lock.leapmotor_mate_5r1234_door_lock')
+  })
+
   it('shows the action row with the buttons Mate publishes', async () => {
     const el = await mount()
     const row = deep(el.shadowRoot!, 'leapmotor-mate-actions-row')[0] as HTMLElement
