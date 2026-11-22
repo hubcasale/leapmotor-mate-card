@@ -402,14 +402,14 @@ describe('alertFor — status', () => {
 
   it('does not alert with the car unlocked on a stale reading', () => {
     // An old reading is not an alert, it's an old reading. See spec §4.2.
-    const state = realState({ 'lock/door_lock': 'unlocked', 'sensor/data_age': '3600' })
+    const state = realState({ 'lock/door_lock': 'unlocked', 'sensor/data_age': '3600', 'sensor/state': 'unknown', 'sensor/gear': 'D' })
     expect(state.lock.stale).toBe(true)
     expect(alertFor(group('status'), state, RANGE)).toBe('none')
   })
 
   it('warns for an open opening even with the locks stale', () => {
     // The staleness belongs to the lock reading, not to the trunk.
-    const state = realState({ 'binary_sensor/trunk': 'on', 'sensor/data_age': '3600' })
+    const state = realState({ 'binary_sensor/trunk': 'on', 'sensor/data_age': '3600', 'sensor/state': 'unknown', 'sensor/gear': 'D' })
     expect(state.lock.stale).toBe(true)
     expect(alertFor(group('status'), state, RANGE)).toBe('warn')
   })
@@ -462,7 +462,7 @@ describe('alertFor — tires', () => {
 
 describe('alertFor — location and the groups with no alert', () => {
   it('warns with a stale position, judged by the age of the car\'s last message', () => {
-    expect(alertFor(group('location'), realState({ 'sensor/data_age': '3600' }), RANGE)).toBe('warn')
+    expect(alertFor(group('location'), realState({ 'sensor/data_age': '3600', 'sensor/state': 'unknown', 'sensor/gear': 'D' }), RANGE)).toBe('warn')
     expect(alertFor(group('location'), realState(), RANGE)).toBe('none')
   })
 

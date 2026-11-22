@@ -6,6 +6,18 @@ import type { Activity, ChargingPhase, EntityMap, VehicleState } from './types'
 const INVALID = new Set(['unknown', 'unavailable', 'none', ''])
 const STALE_AFTER_SECONDS = 900
 
+/**
+ * Whether an old reading is a doubtful one. A parked car goes to sleep and
+ * says nothing for hours or days: what it last reported — locked, where it
+ * is — still holds, and flagging it would turn every parked car amber. An old
+ * reading is only doubtful for a car that was last seen out of Park.
+ */
+function silentTooLong(hass: HomeAssistant, map: EntityMap, ageSeconds: number | undefined): boolean {
+  if (ageSeconds === undefined || ageSeconds <= STALE_AFTER_SECONDS) return false
+  const parked = str(hass, map, 'vehicleState')?.toLowerCase() === 'parked' || str(hass, map, 'gear') === 'P'
+  return !parked
+}
+
 function entity(hass: HomeAssistant, map: EntityMap, key: LogicalKey): HassEntity | undefined {
   const id = map[key]
   if (!id) return undefined
@@ -204,7 +216,7 @@ function buildLocation(hass: HomeAssistant, map: EntityMap): VehicleState['locat
     ageSeconds,
     stale: st.attributes.location_is_stale === true
       || (source?.includes('stale') ?? false)
-      || (ageSeconds !== undefined && ageSeconds > STALE_AFTER_SECONDS),
+      || silentTooLong(hass, map, ageSeconds),
   }
 }
 
@@ -224,7 +236,7 @@ export function buildVehicleState(hass: HomeAssistant, map: EntityMap, now: Date
   const locked = bool(hass, map, 'lock')
   const ageSeconds = num(hass, map, 'lockStateAge') ?? num(hass, map, 'dataAge')
   const source = str(hass, map, 'lockStateSource')
-  const stale = (source?.includes('stale') ?? false) || (ageSeconds !== undefined && ageSeconds > STALE_AFTER_SECONDS)
+  const stale = (source?.includes('stale') ?? false) || silentTooLong(hass, map, ageSeconds)
 
   return {
     online: battery !== undefined || range !== undefined || locked !== undefined,

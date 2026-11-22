@@ -33,6 +33,12 @@ and the project uses [Semantic Versioning](https://semver.org/).
 - The confirmation no longer uses the browser's native dialog.
 - The five climate buttons fit on one row.
 
+### Fixed
+
+- A parked car that has been asleep for hours no longer shows its status and
+  location tiles as doubtful: an old reading is only flagged for a car last
+  seen out of Park.
+
 ## [0.5.3] — 2026-11-08
 
 ### Fixed

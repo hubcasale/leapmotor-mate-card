@@ -125,7 +125,13 @@ describe('buildVehicleState — location', () => {
     expect(build().location?.zone).toBeUndefined()
   })
   it('is stale when the car has been silent for a long time', () => {
-    expect(build({ 'sensor/data_age': '3600' }).location?.stale).toBe(true)
+    expect(build({ 'sensor/data_age': '3600', 'sensor/state': 'unknown', 'sensor/gear': 'D' }).location?.stale).toBe(true)
+  })
+  it('is not stale for a parked car that has been asleep for hours', () => {
+    const s = build({ 'sensor/data_age': '11700' })
+    expect(s.location?.stale).toBe(false)
+    expect(s.lock.stale).toBe(false)
+    expect(s.lock.ageSeconds).toBe(11700)
   })
   it('has no location without coordinates', () => {
     const hass = mateHass()
