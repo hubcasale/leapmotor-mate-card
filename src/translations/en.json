@@ -170,5 +170,14 @@
   "action_group.openings": "Openings",
   "action_group.climate": "Climate",
   "action_group.charging": "Charging",
-  "action_group.vehicle": "Vehicle"
+  "action_group.vehicle": "Vehicle",
+  "editor.action_sections": "Sections of the action row",
+  "editor.action_sections_auto": "The buttons are grouped by function automatically. Customise to name the sections yourself and choose what goes in each.",
+  "editor.action_sections_help": "Each section has a name of your choosing and its own buttons, in this order. A function placed in two sections is shown in the first.",
+  "editor.section_title": "Section name",
+  "editor.section_actions": "Functions",
+  "editor.section_delete": "Delete section",
+  "editor.section_start": "Customise the sections",
+  "editor.section_add": "Add a section",
+  "editor.section_reset": "Back to automatic"
 }

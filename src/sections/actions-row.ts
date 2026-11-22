@@ -1,7 +1,7 @@
-import { LitElement, css, html } from 'lit'
+import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property } from 'lit/decorators.js'
 import {
-  BLOCKED_WHILE_DRIVING, actionIcon, actionLabel, groupActions, isActionAvailable, type ActionEventDetail,
+  BLOCKED_WHILE_DRIVING, actionIcon, actionLabel, isActionAvailable, type ActionBlock, type ActionEventDetail,
 } from '../actions'
 import type { TranslateFn } from '../localize'
 import { sharedStyles } from '../theme'
@@ -12,7 +12,8 @@ export class LeapmotorActionsRow extends LitElement {
   @property({ attribute: false }) state!: VehicleState
   @property({ attribute: false }) t!: TranslateFn
   @property({ attribute: false }) map!: EntityMap
-  @property({ attribute: false }) actions: ActionId[] = []
+  /** The row's blocks, already resolved by the card: titles and buttons. */
+  @property({ attribute: false }) blocks: ActionBlock[] = []
   @property({ attribute: false }) pending?: ActionId
   /** Functions the owner turned off: they are offered nowhere. */
   @property({ attribute: false }) disabledActions: readonly ActionId[] = []
@@ -31,9 +32,9 @@ export class LeapmotorActionsRow extends LitElement {
 
   override render() {
     return html`<div class="groups">
-      ${groupActions(this.actions).map(g => html`
-        <div class="group" role="group" aria-label=${this.t(`action_group.${g.group}`)}>
-          <div class="group-title muted">${this.t(`action_group.${g.group}`)}</div>
+      ${this.blocks.map(g => html`
+        <div class="group" role="group" aria-label=${g.title || nothing}>
+          ${g.title ? html`<div class="group-title muted">${g.title}</div>` : nothing}
           <div class="buttons">
             ${g.actions.map(action => html`
               <button

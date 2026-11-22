@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit'
 import { customElement, state as internalState } from 'lit/decorators.js'
 import {
-  actionLabel, decideAction, forgetRequest, lockToggleAction, opensCar, protectionOf,
+  actionLabel, decideAction, forgetRequest, lockToggleAction, opensCar, protectionOf, resolveActionBlocks,
   pruneRequests, resolveAction,
   type ActionEventDetail, type ActionPayload,
   type SeatLevels, type SeatRequests, type ServiceCall,
@@ -463,7 +463,6 @@ export class LeapmotorCard extends LitElement {
     const tireRange = clampTireRange(config.tire_range)
     const grid = resolveGrid(config, map)
     const openGroup = grid.groups.find(group => group.id === this._openGroup)
-    const actions = config.actions ?? DEFAULT_ACTIONS
     const name = config.name ?? result.deviceName ?? ''
     const imageMode = config.image ?? 'auto'
     const imageUrl = this.imageUrl(map)
@@ -648,7 +647,7 @@ export class LeapmotorCard extends LitElement {
           ? html`
             <leapmotor-mate-actions-row
               .state=${state} .t=${t} .map=${map} .pending=${this._pending}
-              .actions=${actions.filter(a => !protection.disabled.includes(a))}
+              .blocks=${resolveActionBlocks(config, DEFAULT_ACTIONS, protection.disabled, t, map)}
               .disabledActions=${protection.disabled}
             ></leapmotor-mate-actions-row>
 

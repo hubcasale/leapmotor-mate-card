@@ -2,7 +2,7 @@ import { isWindowOpen } from './format'
 import type { TranslateFn } from './localize'
 import {
   DEFAULT_CONFIRM_ACTIONS, DEFAULT_DOUBLE_CONFIRM_ACTIONS,
-  type ActionId, type EntityMap, type LeapmotorCardConfig, type VehicleState,
+  type ActionId, type ActionSection, type EntityMap, type LeapmotorCardConfig, type VehicleState,
 } from './types'
 import type { LogicalKey, SeatLevelKey } from './keys'
 
@@ -431,7 +431,9 @@ export function isActionAvailable(
  */
 export type ActionGroup = 'access' | 'openings' | 'climate' | 'charging' | 'vehicle'
 
-export const ACTION_GROUP_ORDER: readonly ActionGroup[] = ['access', 'openings', 'climate', 'charging', 'vehicle']
+// Access, openings and vehicle are six buttons at most and share the first
+// line; climate and charging share the second.
+export const ACTION_GROUP_ORDER: readonly ActionGroup[] = ['access', 'openings', 'vehicle', 'climate', 'charging']
 
 export const ACTION_GROUP: Record<ActionId, ActionGroup> = {
   unlock: 'access', lock: 'access', trunk: 'access',
@@ -448,4 +450,64 @@ export function groupActions(actions: readonly ActionId[]): { group: ActionGroup
   return ACTION_GROUP_ORDER
     .map(group => ({ group, actions: actions.filter(a => ACTION_GROUP[a] === group) }))
     .filter(g => g.actions.length > 0)
+}
+
+/**
+ * The entities each action can press. An action none of whose entities the
+ * car has is left out of the row altogether: Mate hides what a car cannot do,
+ * and a button that could never work is clutter. One that exists but cannot
+ * act right now (the car is moving) stays, dimmed.
+ */
+const ACTION_ENTITIES: Record<ActionId, readonly LogicalKey[]> = {
+  unlock: ['lock'], lock: ['lock'], trunk: ['openTrunk', 'closeTrunk'],
+  windows: ['openWindows', 'closeWindows'], sunshade: ['openSunshade', 'closeSunshade'],
+  quickCool: ['quickCool'], quickHeat: ['quickHeat'], quickVentilation: ['quickVentilation'], defrost: ['windshieldDefrost'],
+  findVehicle: ['findVehicle'], unlockCharger: ['unlockCharger'], refresh: ['refreshData'],
+  climate: ['climateAuto', 'climateOff'], climateOff: ['climateOff'],
+  steeringWheelHeat: ['steeringWheelHeatOn', 'steeringWheelHeatOff'], mirrorHeat: ['mirrorHeatOn', 'mirrorHeatOff'],
+  batteryPreheat: ['batteryPreheat'],
+  driverSeatHeat: ['driverSeatHeatOn', 'driverSeatHeatOff'], driverSeatVent: ['driverSeatVentOn', 'driverSeatVentOff'],
+  passengerSeatHeat: ['passengerSeatHeatOn', 'passengerSeatHeatOff'], passengerSeatVent: ['passengerSeatVentOn', 'passengerSeatVentOff'],
+  setChargeLimit: [],
+}
+
+/** Whether the car has anything this action could press. */
+export function actionExists(action: ActionId, map: EntityMap): boolean {
+  return ACTION_ENTITIES[action].some(key => !!map[key])
+}
+
+/** A block of the action row, ready to draw: its title and its buttons. */
+export interface ActionBlock { title: string; actions: ActionId[] }
+
+/**
+ * The blocks of the action row. With `action_sections` written they are the
+ * owner's sections, under the owner's names; without, `actions` grouped by
+ * function under the translated names. Either way an unknown action, a
+ * function turned off and an action already placed in an earlier section are
+ * dropped, and a section left with nothing is not drawn.
+ */
+export function resolveActionBlocks(
+  config: Pick<LeapmotorCardConfig, 'actions' | 'action_sections'>,
+  defaults: readonly ActionId[],
+  disabled: readonly ActionId[],
+  t: TranslateFn,
+  /** The car's entities: with it, an action the car does not have is left out. */
+  map?: EntityMap,
+): ActionBlock[] {
+  const known = (a: unknown): a is ActionId =>
+    typeof a === 'string' && a in ACTION_GROUP && (!map || actionExists(a as ActionId, map))
+  const sections = Array.isArray(config.action_sections) ? config.action_sections : []
+  if (sections.length === 0) {
+    const actions = (Array.isArray(config.actions) ? config.actions : defaults).filter(a => known(a) && !disabled.includes(a))
+    return groupActions(actions).map(g => ({ title: t(`action_group.${g.group}`), actions: g.actions }))
+  }
+  const seen = new Set<ActionId>()
+  const blocks: ActionBlock[] = []
+  for (const section of sections as Partial<ActionSection>[]) {
+    const actions = (Array.isArray(section?.actions) ? section.actions : [])
+      .filter(a => known(a) && !disabled.includes(a) && !seen.has(a))
+    actions.forEach(a => seen.add(a))
+    if (actions.length > 0) blocks.push({ title: typeof section?.title === 'string' ? section.title.trim() : '', actions })
+  }
+  return blocks
 }

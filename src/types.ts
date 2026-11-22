@@ -34,6 +34,9 @@ export type ActionId =
   | 'driverSeatHeat' | 'driverSeatVent' | 'passengerSeatHeat' | 'passengerSeatVent'
   | 'setChargeLimit'
 
+/** One section of the action row: a name of the owner's choosing and its buttons. */
+export interface ActionSection { title?: string; actions: ActionId[] }
+
 export interface LeapmotorCardConfig {
   type: string
   device?: string
@@ -46,6 +49,12 @@ export interface LeapmotorCardConfig {
   mate_url?: string
   image?: 'auto' | 'entity' | 'none' | string
   actions?: ActionId[]
+  /**
+   * The action row as sections of the owner's own: each has a title and the
+   * actions it holds, in order. Absent or empty, the row groups `actions` by
+   * function on its own.
+   */
+  action_sections?: ActionSection[]
   confirm_actions?: ActionId[]
   /** Actions that ask twice before opening the car. Default: unlock, trunk, windows, sunshade. */
   double_confirm_actions?: ActionId[]
@@ -123,7 +132,20 @@ export interface VehicleState {
   schedule: { enabled?: boolean; start?: string; end?: string; recurrence?: string; weekly?: boolean; cancelledOnce?: boolean }
 }
 
-export const DEFAULT_ACTIONS: ActionId[] = ['unlock', 'lock', 'trunk', 'windows', 'findVehicle', 'sunshade']
+/**
+ * The buttons of the action row when nothing is configured: what one reaches
+ * for from a dashboard, function by function — getting in, airing the car,
+ * finding it, warming or cooling it before leaving, and the charge cable. The
+ * row groups them (see `ACTION_GROUP`) and leaves out the ones the car does
+ * not have.
+ */
+export const DEFAULT_ACTIONS: ActionId[] = [
+  'unlock', 'lock', 'trunk',
+  'windows', 'sunshade',
+  'findVehicle',
+  'climate', 'quickCool', 'quickHeat', 'defrost',
+  'unlockCharger', 'batteryPreheat',
+]
 /**
  * The actions that open the car up, and so ask twice before doing it. The
  * second question only comes when the tap would OPEN: closing the trunk or the

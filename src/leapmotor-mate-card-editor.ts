@@ -1,12 +1,13 @@
 import { LitElement, css, html, nothing } from 'lit'
 import { customElement, property, state as internalState } from 'lit/decorators.js'
 import type { HomeAssistant } from './ha-types'
+import { groupActions } from './actions'
 import { GROUP_CATALOGUE, GROUP_ORDER } from './groups'
 import { createTranslator, pickLanguage } from './localize'
 import {
   DEFAULT_ACTIONS, DEFAULT_CONFIRM_ACTIONS, DEFAULT_DOUBLE_CONFIRM_ACTIONS, DEFAULT_MAP_ZOOM, DEFAULT_TIRE_RANGE,
   MAP_ZOOM_MAX, MAP_ZOOM_MIN, clampTireRange,
-  type ActionId, type GridEntry, type GroupId, type LeapmotorCardConfig,
+  type ActionId, type ActionSection, type GridEntry, type GroupId, type LeapmotorCardConfig,
 } from './types'
 
 /**
@@ -167,6 +168,83 @@ export class LeapmotorCardEditor extends LitElement {
     this.dispatchEvent(new CustomEvent('config-changed', { detail: { config }, bubbles: true, composed: true }))
   }
 
+  /** Writes `action_sections`, or removes the key when no section is left: the row then groups by itself. */
+  private commitSections(sections: ActionSection[]) {
+    const config = { ...this._config, type: 'custom:leapmotor-mate-card' } as LeapmotorCardConfig
+    if (sections.length > 0) config.action_sections = sections
+    else delete config.action_sections
+    this._config = config
+    this.dispatchEvent(new CustomEvent('config-changed', { detail: { config }, bubbles: true, composed: true }))
+  }
+
+  private sections(): ActionSection[] {
+    const s = this._config?.action_sections
+    return Array.isArray(s) ? s.map(x => ({ title: x?.title ?? '', actions: Array.isArray(x?.actions) ? x.actions : [] })) : []
+  }
+
+  /** Starts from what the row shows today, so customising is renaming and moving, not rebuilding. */
+  private startSections(t: (k: string) => string) {
+    const actions = this._config?.actions ?? DEFAULT_ACTIONS
+    this.commitSections(groupActions(actions).map(g => ({ title: t(`action_group.${g.group}`), actions: g.actions })))
+  }
+
+  private moveSection(index: number, delta: -1 | 1) {
+    const list = this.sections()
+    const target = index + delta
+    if (target < 0 || target >= list.length) return
+    const [moved] = list.splice(index, 1)
+    list.splice(target, 0, moved!)
+    this.commitSections(list)
+  }
+
+  /**
+   * The action row's sections: a name and a set of buttons each, in the order
+   * they are drawn. With none, the row groups the chosen actions by function
+   * under its own names — which is what the first button turns into sections
+   * to start from.
+   */
+  private renderSectionsEditor(t: (k: string) => string) {
+    const list = this.sections()
+    const options = ALL_ACTIONS.map(a => ({ value: a, label: actionOptionLabel(t, a) }))
+    const schema = [
+      { name: 'title', selector: { text: {} } },
+      { name: 'actions', selector: { select: { multiple: true, mode: 'dropdown', options } } },
+    ]
+    const label = (s: { name: string }) => t(s.name === 'title' ? 'editor.section_title' : 'editor.section_actions')
+    return html`<div class="sections-editor">
+      <div class="grid-title">${t('editor.action_sections')}</div>
+      <div class="grid-help">${t(list.length ? 'editor.action_sections_help' : 'editor.action_sections_auto')}</div>
+      ${list.map((section, index) => html`
+        <div class="section-card">
+          <ha-form
+            .hass=${this.hass} .data=${section} .schema=${schema} .computeLabel=${label}
+            @value-changed=${(e: CustomEvent<{ value: ActionSection }>) => {
+              e.stopPropagation()
+              const next = this.sections()
+              next[index] = { title: e.detail.value.title ?? '', actions: e.detail.value.actions ?? [] }
+              this.commitSections(next)
+            }}
+          ></ha-form>
+          <div class="section-tools">
+            <ha-icon-button .label=${t('editor.grid_up')} .disabled=${index === 0}
+              @click=${() => this.moveSection(index, -1)}><ha-icon icon="mdi:arrow-up"></ha-icon></ha-icon-button>
+            <ha-icon-button .label=${t('editor.grid_down')} .disabled=${index === list.length - 1}
+              @click=${() => this.moveSection(index, 1)}><ha-icon icon="mdi:arrow-down"></ha-icon></ha-icon-button>
+            <ha-icon-button .label=${t('editor.section_delete')}
+              @click=${() => this.commitSections(this.sections().filter((_, i) => i !== index))}><ha-icon icon="mdi:delete-outline"></ha-icon></ha-icon-button>
+          </div>
+        </div>
+      `)}
+      <div class="section-buttons">
+        ${list.length === 0
+          ? html`<button class="add" @click=${() => this.startSections(t)}>${t('editor.section_start')}</button>`
+          : html`
+            <button class="add" @click=${() => this.commitSections([...this.sections(), { title: '', actions: [] }])}>${t('editor.section_add')}</button>
+            <button class="add" @click=${() => this.commitSections([])}>${t('editor.section_reset')}</button>`}
+      </div>
+    </div>`
+  }
+
   /** The groups in order, with each one's checkbox state. */
   private gridRows(): { id: GroupId; on: boolean }[] {
     const configured = this._config?.grid
@@ -285,7 +363,18 @@ export class LeapmotorCardEditor extends LitElement {
   }
 
   static override styles = css`
-    .grid-editor { margin-top: 16px; }
+    .grid-editor, .sections-editor { margin-top: 16px; }
+    .section-card {
+      display: flex; align-items: flex-start; gap: 4px; padding: 8px 4px 8px 12px; margin-top: 8px;
+      border: 1px solid var(--divider-color); border-radius: 12px;
+    }
+    .section-card ha-form { flex: 1 1 auto; min-width: 0; }
+    .section-tools { display: flex; flex-direction: column; }
+    .section-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    button.add {
+      min-height: 36px; padding: 0 16px; border-radius: 18px; cursor: pointer; font: inherit; font-weight: 500;
+      color: var(--primary-color); background: transparent; border: 1px solid var(--primary-color);
+    }
     .grid-title {
       font-size: 0.85rem; font-weight: 500;
       color: var(--secondary-text-color); margin-bottom: 4px;
@@ -322,6 +411,7 @@ export class LeapmotorCardEditor extends LitElement {
         .computeHelper=${this.computeHelper(t)}
         @value-changed=${this.valueChanged}
       ></ha-form>
+      ${this.renderSectionsEditor(t)}
       ${this.renderGridEditor(t)}
     `
   }

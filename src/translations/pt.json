@@ -170,5 +170,14 @@
   "action_group.openings": "Aberturas",
   "action_group.climate": "Clima",
   "action_group.charging": "Carga",
-  "action_group.vehicle": "Veículo"
+  "action_group.vehicle": "Veículo",
+  "editor.action_sections": "Secções da linha de ações",
+  "editor.action_sections_auto": "Os botões são agrupados por função automaticamente. Personalize para dar nome às secções e escolher o que cada uma contém.",
+  "editor.action_sections_help": "Cada secção tem um nome à sua escolha e os seus botões, por esta ordem. Uma função colocada em duas secções aparece na primeira.",
+  "editor.section_title": "Nome da secção",
+  "editor.section_actions": "Funções",
+  "editor.section_delete": "Eliminar secção",
+  "editor.section_start": "Personalizar as secções",
+  "editor.section_add": "Adicionar secção",
+  "editor.section_reset": "Voltar ao automático"
 }

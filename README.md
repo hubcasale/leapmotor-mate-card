@@ -64,7 +64,11 @@ type: custom:leapmotor-mate-card
 name: My B10
 language: en
 mate_url: http://192.168.1.10:4000
-actions: [unlock, lock, trunk, windows, findVehicle, sunshade]
+action_sections:
+  - title: Every day
+    actions: [lock, climate, findVehicle]
+  - title: With care
+    actions: [unlock, trunk, windows]
 double_confirm_actions: [unlock, trunk, windows, sunshade]
 disabled_actions: []
 grid: [charging, status, climate, tires, trip, location]
@@ -78,7 +82,8 @@ tire_range: [2.0, 2.6]
 | `mate_url` | none | Address of Mate's web interface, e.g. `http://192.168.1.10:4000`. With it the header shows the car's own picture — see below. |
 | `language` | Home Assistant's | `en`, `it` or `pt`. |
 | `image` | `auto` | `auto` shows the car's picture from Mate if `mate_url` is set, else the drawn silhouette, `entity` only a picture, `none` nothing, or a URL of your own photo. |
-| `actions` | `[unlock, lock, trunk, windows, findVehicle, sunshade]` | The buttons of the action row — see below. |
+| `actions` | access, openings, find, climate, charging | The buttons of the action row, grouped by function automatically — see below. |
+| `action_sections` | none | Your own sections of the action row: a list of `{title, actions}`. Replaces the automatic grouping. |
 | `double_confirm_actions` | `[unlock, trunk, windows, sunshade]` | Actions that ask **twice** before opening the car — see [Safety](#safety). |
 | `confirm_actions` | `[]` | Actions that ask once. |
 | `disabled_actions` | `[]` | Functions turned off: no button anywhere in the card. |
@@ -120,7 +125,7 @@ confirm_actions: [findVehicle]
 
 Every option above is in the card's editor, grouped by function: **Vehicle**
 (name, car, language), **Picture and taps** (Mate's address, picture, tap on
-the car, tap on the range), **Quick actions**, **Safety** (ask twice, ask
+the car, tap on the range), **Quick actions** and their renamable sections, **Safety** (ask twice, ask
 once, turned off), **Tyres and map**, and the **Groups** shown with their
 order. It writes to the YAML only what differs from the defaults.
 
@@ -161,8 +166,14 @@ to `config/www/b10.png` and set `image: /local/b10.png`.
 `climate`, `climateOff`, `batteryPreheat`, `steeringWheelHeat`, `mirrorHeat`,
 `driverSeatHeat`, `driverSeatVent`, `passengerSeatHeat`, `passengerSeatVent`.
 
-The action row groups its buttons by function — access, openings, climate,
-charging, vehicle — whatever order you list them in.
+Out of the box the row has five sections: **Access** (unlock, lock, trunk),
+**Openings** (windows, sunshade), **Vehicle** (find), **Climate** (on/off,
+cool, heat, defrost) and **Charging** (release cable, preheat battery). A
+button whose entity Mate does not publish for your car is left out.
+
+With `actions` you choose the buttons and the card keeps grouping them by
+function. With `action_sections` — or *Customise the sections* in the editor —
+the sections are yours: name them, choose what goes in each, reorder them.
 
 Mate commands most functions with a pair of buttons, so the card turns a tap
 into the button that reverses what the car reports: `trunk` opens or closes,

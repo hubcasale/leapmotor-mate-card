@@ -22,8 +22,11 @@ and the project uses [Semantic Versioning](https://semver.org/).
   Quick actions, Safety, Tyres and map, Groups — with every field labelled and
   explained in the user's language, the tyre range as two fields, and only
   what differs from the defaults written to the YAML.
-- **The action row groups its buttons by function** (access, openings,
-  climate, charging, vehicle).
+- **The action row is organised in sections.** Out of the box: Access,
+  Openings, Vehicle, Climate and Charging, with the climate and charging
+  buttons now there by default; a button the car has no entity for is left
+  out. New option `action_sections` — and *Customise the sections* in the
+  editor — for sections of your own, named, filled and ordered as you like.
 - A demo page (`npm run demo`) that mounts the card against a fake Mate car;
   the screenshots in the README come from it.
 

@@ -65,7 +65,11 @@ type: custom:leapmotor-mate-card
 name: La mia B10
 language: it
 mate_url: http://192.168.1.10:4000
-actions: [unlock, lock, trunk, windows, findVehicle, sunshade]
+action_sections:
+  - title: Ogni giorno
+    actions: [lock, climate, findVehicle]
+  - title: Con attenzione
+    actions: [unlock, trunk, windows]
 double_confirm_actions: [unlock, trunk, windows, sunshade]
 disabled_actions: []
 grid: [charging, status, climate, tires, trip, location]
@@ -79,7 +83,8 @@ tire_range: [2.0, 2.6]
 | `mate_url` | nessuno | Indirizzo dell'interfaccia web di Mate, per esempio `http://192.168.1.10:4000`. Con questo l'intestazione mostra la foto vera dell'auto — vedi sotto. |
 | `language` | quella di Home Assistant | `en`, `it` o `pt`. |
 | `image` | `auto` | `auto` mostra la foto dell'auto da Mate se `mate_url` è indicato, altrimenti la sagoma disegnata, `entity` solo un'immagine, `none` niente, oppure l'indirizzo della tua foto. |
-| `actions` | `[unlock, lock, trunk, windows, findVehicle, sunshade]` | I pulsanti della riga di azioni — vedi sotto. |
+| `actions` | accesso, aperture, trova, clima, ricarica | I pulsanti della riga di azioni, raggruppati per funzione in automatico — vedi sotto. |
+| `action_sections` | nessuno | Le tue sezioni della riga di azioni: un elenco di `{title, actions}`. Sostituisce il raggruppamento automatico. |
 | `double_confirm_actions` | `[unlock, trunk, windows, sunshade]` | Azioni che chiedono conferma **due volte** prima di aprire l'auto — vedi [Sicurezza](#sicurezza). |
 | `confirm_actions` | `[]` | Azioni che chiedono conferma una volta. |
 | `disabled_actions` | `[]` | Funzioni disattivate: nessun pulsante nella scheda. |
@@ -121,7 +126,7 @@ confirm_actions: [findVehicle]
 
 Tutte le opzioni sono nell'editor della scheda, raggruppate per funzione:
 **Veicolo** (nome, auto, lingua), **Immagine e tocchi** (indirizzo di Mate,
-immagine, tocco sull'auto, tocco sull'autonomia), **Azioni rapide**,
+immagine, tocco sull'auto, tocco sull'autonomia), **Azioni rapide** con le loro sezioni rinominabili,
 **Sicurezza** (chiedi due volte, chiedi una volta, disattivate), **Pneumatici e
 mappa**, e i **Gruppi** mostrati con il loro ordine. Scrive nello YAML solo ciò
 che differisce dai valori predefiniti.
@@ -164,8 +169,15 @@ salva l'immagine in `config/www/b10.png` e imposta `image: /local/b10.png`.
 `climate`, `climateOff`, `batteryPreheat`, `steeringWheelHeat`, `mirrorHeat`,
 `driverSeatHeat`, `driverSeatVent`, `passengerSeatHeat`, `passengerSeatVent`.
 
-La riga di azioni raggruppa i pulsanti per funzione — accesso, aperture,
-clima, ricarica, veicolo — qualunque sia l'ordine in cui li elenchi.
+Senza configurare nulla la riga ha cinque sezioni: **Accesso** (sblocca,
+blocca, bagagliaio), **Aperture** (finestrini, tendina), **Veicolo** (trova),
+**Clima** (accendi/spegni, raffredda, riscalda, sbrina) e **Ricarica** (sblocca
+cavo, preriscalda batteria). Un pulsante la cui entità Mate non pubblica per la
+tua auto non compare.
+
+Con `actions` scegli i pulsanti e la scheda continua a raggrupparli per
+funzione. Con `action_sections` — o *Personalizza le sezioni* nell'editor — le
+sezioni sono tue: dai loro un nome, scegli cosa contiene ciascuna, le riordini.
 
 Mate comanda la maggior parte delle funzioni con una coppia di pulsanti, quindi
 la scheda trasforma un tocco nel pulsante che inverte quanto riferisce l'auto:

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   BLOCKED_WHILE_DRIVING, PAYLOAD_ACTIONS, actionIcon, actionLabel, decideAction, forgetRequest,
-  isActionAvailable, lockPillShape, lockToggleAction, opensCar, pendingValue, protectionOf, pruneRequests,
+  isActionAvailable, lockPillShape, lockToggleAction, opensCar, pendingValue, protectionOf, pruneRequests, resolveActionBlocks,
   resolveAction, shownLevel, type Protection,
 } from '../src/actions'
 import { resolveEntities } from '../src/resolver'
 import { buildVehicleState } from '../src/vehicle-state'
 import { createTranslator } from '../src/localize'
-import type { ActionId } from '../src/types'
+import { DEFAULT_ACTIONS, type ActionId } from '../src/types'
 import { MATE_NOW as REAL_NOW, mateHass as realHass, id as eid } from './fixtures/mate-states'
 
 /**
@@ -499,5 +499,70 @@ describe('isActionAvailable', () => {
 
   it('the while-driving list names only existing actions', () => {
     for (const action of BLOCKED_WHILE_DRIVING) expect(Object.keys(ALL_ACTIONS)).toContain(action)
+  })
+})
+
+describe('resolveActionBlocks', () => {
+  const DEFAULTS: ActionId[] = ['unlock', 'lock', 'trunk', 'windows', 'findVehicle', 'sunshade']
+
+  it('groups the actions by function, under the translated names, when no section is written', () => {
+    expect(resolveActionBlocks({}, DEFAULTS, [], t)).toEqual([
+      { title: t('action_group.access'), actions: ['unlock', 'lock', 'trunk'] },
+      { title: t('action_group.openings'), actions: ['windows', 'sunshade'] },
+      { title: t('action_group.vehicle'), actions: ['findVehicle'] },
+    ])
+  })
+
+  it('uses the owner\'s sections, names and order when they are written', () => {
+    const blocks = resolveActionBlocks({ action_sections: [
+      { title: 'Ogni giorno', actions: ['lock', 'climate'] },
+      { title: 'Con attenzione', actions: ['unlock', 'trunk'] },
+    ] }, DEFAULTS, [], t)
+    expect(blocks).toEqual([
+      { title: 'Ogni giorno', actions: ['lock', 'climate'] },
+      { title: 'Con attenzione', actions: ['unlock', 'trunk'] },
+    ])
+  })
+
+  it('drops what is turned off, unknown or already placed, and a section left empty', () => {
+    const blocks = resolveActionBlocks({ action_sections: [
+      { title: 'A', actions: ['lock', 'unlock', 'nonsense' as ActionId] },
+      { title: 'B', actions: ['lock'] },
+      { title: 'C', actions: ['trunk'] },
+    ] }, DEFAULTS, ['unlock'], t)
+    expect(blocks).toEqual([{ title: 'A', actions: ['lock'] }, { title: 'C', actions: ['trunk'] }])
+  })
+
+  it('survives a malformed list, and falls back to the automatic groups for an empty one', () => {
+    expect(resolveActionBlocks({ action_sections: 'x' as never }, DEFAULTS, [], t)).toHaveLength(3)
+    expect(resolveActionBlocks({ action_sections: [] }, DEFAULTS, [], t)).toHaveLength(3)
+    expect(resolveActionBlocks({ action_sections: [null as never, { actions: ['lock'] }] }, DEFAULTS, [], t)).toEqual([{ title: '', actions: ['lock'] }])
+  })
+})
+
+describe('the action row out of the box', () => {
+  it('has five sections that fit two lines, each a function', () => {
+    const { map } = ctx()
+    const blocks = resolveActionBlocks({}, DEFAULT_ACTIONS, [], t, map)
+    expect(blocks.map(b => [b.title, b.actions])).toEqual([
+      [t('action_group.access'), ['unlock', 'lock', 'trunk']],
+      [t('action_group.openings'), ['windows', 'sunshade']],
+      [t('action_group.vehicle'), ['findVehicle']],
+      [t('action_group.climate'), ['climate', 'quickCool', 'quickHeat', 'defrost']],
+      [t('action_group.charging'), ['unlockCharger', 'batteryPreheat']],
+    ])
+  })
+
+  it('leaves out what the car does not have, and a section left empty with it', () => {
+    const { map } = ctx({ 'button/open_sunshade': null, 'button/close_sunshade': null, 'button/unlock_charge_cable': null, 'button/preheat_battery': null, 'button/defrost': null })
+    const blocks = resolveActionBlocks({}, DEFAULT_ACTIONS, [], t, map)
+    expect(blocks.map(b => b.actions)).toEqual([
+      ['unlock', 'lock', 'trunk'], ['windows'], ['findVehicle'], ['climate', 'quickCool', 'quickHeat'],
+    ])
+  })
+
+  it('keeps the climate button while either of its two buttons exists', () => {
+    const { map } = ctx({ 'button/a_c_off': null })
+    expect(resolveActionBlocks({ actions: ['climate'] }, DEFAULT_ACTIONS, [], t, map)).toHaveLength(1)
   })
 })

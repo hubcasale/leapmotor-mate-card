@@ -199,6 +199,13 @@ describe('the confirmation, in the card', () => {
     expect(calls).toHaveLength(1)
   })
 
+  it('draws the owner\'s sections under the owner\'s names', async () => {
+    const { el } = await mounted({ action_sections: [{ title: 'Ogni giorno', actions: ['lock', 'findVehicle'] }, { title: 'Con attenzione', actions: ['unlock'] }] })
+    const row = deep(el.shadowRoot!, 'leapmotor-mate-actions-row')[0] as HTMLElement
+    expect([...row.shadowRoot!.querySelectorAll('.group-title')].map(n => n.textContent)).toEqual(['Ogni giorno', 'Con attenzione'])
+    expect(row.shadowRoot!.querySelectorAll('button').length).toBe(3)
+  })
+
   it('a function turned off has no button, in the row or in the status sub-view', async () => {
     const { el } = await mounted({ disabled_actions: ['unlock', 'trunk'] })
     expect(rowButton(el, 'Unlock')).toBeUndefined()
@@ -254,6 +261,41 @@ describe('the editor', () => {
     for (const name of names) expect(form.computeLabel({ name }), name).not.toMatch(/^editor\./)
     expect(names).toEqual(expect.arrayContaining(['mate_url', 'image_tap_action', 'double_confirm_actions', 'confirm_actions', 'disabled_actions', 'tire_min', 'tire_max']))
     expect(form.data.double_confirm_actions).toEqual(['unlock', 'trunk', 'windows', 'sunshade'])
+  })
+
+  it('turns the automatic groups into sections that can be renamed, moved and removed', async () => {
+    const ed = document.createElement('leapmotor-mate-card-editor') as unknown as HTMLElement & { hass: HomeAssistant; setConfig(c: unknown): void; updateComplete: Promise<unknown> }
+    ed.setConfig({ type: 'custom:leapmotor-mate-card' })
+    ed.hass = { ...mateHass(), locale: { language: 'it' } }
+    document.body.appendChild(ed)
+    await ed.updateComplete
+    let last: { action_sections?: { title: string; actions: string[] }[] } = {}
+    ed.addEventListener('config-changed', e => { last = (e as CustomEvent).detail.config })
+    const buttons = () => [...ed.shadowRoot!.querySelectorAll('button.add')] as HTMLElement[]
+
+    buttons()[0]!.click()
+    await ed.updateComplete
+    expect(last.action_sections!.map(s => s.title)).toEqual(['Accesso', 'Aperture', 'Veicolo', 'Clima', 'Ricarica'])
+
+    // rename the first one
+    const form = ed.shadowRoot!.querySelector('.section-card ha-form') as HTMLElement
+    form.dispatchEvent(new CustomEvent('value-changed', { detail: { value: { title: 'Chiavi', actions: ['lock', 'unlock'] } } }))
+    await ed.updateComplete
+    expect(last.action_sections![0]).toEqual({ title: 'Chiavi', actions: ['lock', 'unlock'] })
+
+    // move it down, then delete what is now first
+    const tools = () => [...ed.shadowRoot!.querySelectorAll('.section-card')].map(c => [...c.querySelectorAll('ha-icon-button')] as HTMLElement[])
+    tools()[0]![1]!.click()
+    await ed.updateComplete
+    expect(last.action_sections!.map(s => s.title)).toEqual(['Aperture', 'Chiavi', 'Veicolo', 'Clima', 'Ricarica'])
+    tools()[0]![2]!.click()
+    await ed.updateComplete
+    expect(last.action_sections!.map(s => s.title)).toEqual(['Chiavi', 'Veicolo', 'Clima', 'Ricarica'])
+
+    // back to automatic removes the key altogether
+    buttons()[1]!.click()
+    await ed.updateComplete
+    expect('action_sections' in last).toBe(false)
   })
 
   it('writes only what differs from the defaults', async () => {

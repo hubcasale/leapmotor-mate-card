@@ -170,5 +170,14 @@
   "action_group.openings": "Aperture",
   "action_group.climate": "Clima",
   "action_group.charging": "Ricarica",
-  "action_group.vehicle": "Veicolo"
+  "action_group.vehicle": "Veicolo",
+  "editor.action_sections": "Sezioni della riga di azioni",
+  "editor.action_sections_auto": "I pulsanti sono raggruppati per funzione in automatico. Personalizza per dare tu il nome alle sezioni e scegliere cosa contiene ciascuna.",
+  "editor.action_sections_help": "Ogni sezione ha un nome a tua scelta e i suoi pulsanti, in quest'ordine. Una funzione messa in due sezioni compare nella prima.",
+  "editor.section_title": "Nome della sezione",
+  "editor.section_actions": "Funzioni",
+  "editor.section_delete": "Elimina sezione",
+  "editor.section_start": "Personalizza le sezioni",
+  "editor.section_add": "Aggiungi sezione",
+  "editor.section_reset": "Torna all'automatico"
 }
