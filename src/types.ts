@@ -47,6 +47,15 @@ export interface LeapmotorCardConfig {
   image?: 'auto' | 'entity' | 'none' | string
   actions?: ActionId[]
   confirm_actions?: ActionId[]
+  /** Actions that ask twice before opening the car. Default: unlock, trunk, windows, sunshade. */
+  double_confirm_actions?: ActionId[]
+  /** Functions turned off altogether: no button anywhere, and no call. */
+  disabled_actions?: ActionId[]
+  /**
+   * What a tap on the car's picture does. Absent, it opens Mate's web
+   * interface when `mate_url` is set, and nothing otherwise.
+   */
+  image_tap_action?: TapActionConfig
   entities?: EntityMap
   map_zoom?: number
   tire_range?: [number, number]
@@ -115,7 +124,14 @@ export interface VehicleState {
 }
 
 export const DEFAULT_ACTIONS: ActionId[] = ['unlock', 'lock', 'trunk', 'windows', 'findVehicle', 'sunshade']
-export const DEFAULT_CONFIRM_ACTIONS: ActionId[] = ['unlock']
+/**
+ * The actions that open the car up, and so ask twice before doing it. The
+ * second question only comes when the tap would OPEN: closing the trunk or the
+ * windows, or locking, is never what someone regrets.
+ */
+export const DEFAULT_DOUBLE_CONFIRM_ACTIONS: ActionId[] = ['unlock', 'trunk', 'windows', 'sunshade']
+/** Actions that ask once. None by default: the ones worth asking about ask twice. */
+export const DEFAULT_CONFIRM_ACTIONS: ActionId[] = []
 
 export const DEFAULT_MAP_ZOOM = 16
 export const MAP_ZOOM_MIN = 1

@@ -4,7 +4,8 @@ import type { HomeAssistant } from './ha-types'
 import { GROUP_CATALOGUE, GROUP_ORDER } from './groups'
 import { createTranslator, pickLanguage } from './localize'
 import {
-  DEFAULT_ACTIONS, DEFAULT_MAP_ZOOM, MAP_ZOOM_MAX, MAP_ZOOM_MIN,
+  DEFAULT_ACTIONS, DEFAULT_CONFIRM_ACTIONS, DEFAULT_DOUBLE_CONFIRM_ACTIONS, DEFAULT_MAP_ZOOM, DEFAULT_TIRE_RANGE,
+  MAP_ZOOM_MAX, MAP_ZOOM_MIN, clampTireRange,
   type ActionId, type GridEntry, type GroupId, type LeapmotorCardConfig,
 } from './types'
 
@@ -49,6 +50,11 @@ const ACTION_LABEL_KEY: Partial<Record<ActionId, string>> = {
   windows: 'action.windows_open',
 }
 
+/** Two lists with the same members in the same order. */
+function same(a: unknown, b: readonly unknown[]): boolean {
+  return Array.isArray(a) && a.length === b.length && a.every((v, i) => v === b[i])
+}
+
 function actionOptionLabel(t: (k: string) => string, a: ActionId): string {
   return t(ACTION_LABEL_KEY[a] ?? `action.${a}`)
 }
@@ -63,77 +69,94 @@ export class LeapmotorCardEditor extends LitElement {
     this.rememberLongForm(config.grid)
   }
 
+  /**
+   * The form, in the sections Home Assistant's own card editors use: one
+   * expandable block per function, the first one open. `flatten` keeps every
+   * option at the top level of the YAML, whatever block it is edited in.
+   */
   private schema(t: (k: string) => string) {
+    const actionOptions = ALL_ACTIONS.map(a => ({ value: a, label: actionOptionLabel(t, a) }))
+    const tapActions = { ui_action: { actions: ['more-info', 'navigate', 'url', 'perform-action', 'none'] } }
+    const section = (key: string, icon: string, schema: unknown[], expanded = false) =>
+      ({ type: 'expandable', name: '', title: t(`editor.section.${key}`), icon, flatten: true, expanded, schema })
     return [
-      // The car's id (the last six characters of its VIN, as in `leapmotor_mate_xxxxxx_…`).
-      // Only needed with more than one Leapmotor car; the card finds a single one by itself.
-      { name: 'device', selector: { text: {} } },
-      { name: 'name', selector: { text: {} } },
-      { name: 'mate_url', selector: { text: {} } },
-      {
-        name: 'language',
-        // The language names stay in their own language, by convention for
-        // language selectors — "Português" is not translated to English.
-        // Only the automatic option goes through `t()`.
-        selector: { select: { mode: 'dropdown', options: [
-          { value: '', label: t('editor.language_auto') },
-          { value: 'it', label: 'Italiano' },
-          { value: 'pt', label: 'Português' },
-          { value: 'en', label: 'English' },
-        ] } },
-      },
-      {
-        name: 'image',
-        selector: { select: { mode: 'dropdown', custom_value: true, options: [
-          { value: 'auto', label: t('editor.image_auto') },
-          { value: 'entity', label: t('editor.image_entity') },
-          { value: 'none', label: t('editor.image_none') },
-        ] } },
-      },
-      {
-        name: 'actions',
-        selector: { select: { multiple: true, mode: 'list', options: ALL_ACTIONS.map(a => ({ value: a, label: actionOptionLabel(t, a) })) } },
-      },
-      {
-        name: 'confirm_actions',
-        selector: { select: { multiple: true, mode: 'dropdown', options: ALL_ACTIONS.map(a => ({ value: a, label: actionOptionLabel(t, a) })) } },
-      },
-      {
-        name: 'map_zoom',
-        selector: { number: { min: MAP_ZOOM_MIN, max: MAP_ZOOM_MAX, mode: 'box' } },
-      },
-      {
-        name: 'range_tap_action',
-        // HA's own action picker, the same one the tile card's features use.
-        // The list is explicit and does not include `toggle` or `assist`:
-        // the editor must not be able to write an action the card ignores,
-        // which would leave the number looking configured and doing
-        // nothing.
-        selector: { ui_action: { actions: ['more-info', 'navigate', 'url', 'perform-action', 'none'] } },
-      },
+      section('vehicle', 'mdi:car', [
+        { name: 'name', selector: { text: {} } },
+        // The car's id (the last six characters of its VIN, as in `leapmotor_mate_xxxxxx_…`).
+        // Only needed with more than one Leapmotor car; the card finds a single one by itself.
+        { name: 'device', selector: { text: {} } },
+        {
+          name: 'language',
+          // The language names stay in their own language, by convention for
+          // language selectors. Only the automatic option goes through `t()`.
+          selector: { select: { mode: 'dropdown', options: [
+            { value: '', label: t('editor.language_auto') },
+            { value: 'it', label: 'Italiano' },
+            { value: 'en', label: 'English' },
+            { value: 'pt', label: 'Português' },
+          ] } },
+        },
+      ], true),
+      section('picture', 'mdi:image-outline', [
+        { name: 'mate_url', selector: { text: { type: 'url' } } },
+        {
+          name: 'image',
+          selector: { select: { mode: 'dropdown', custom_value: true, options: [
+            { value: 'auto', label: t('editor.image_auto') },
+            { value: 'entity', label: t('editor.image_entity') },
+            { value: 'none', label: t('editor.image_none') },
+          ] } },
+        },
+        // HA's own action picker. The list is explicit and leaves out `toggle`
+        // and `assist`: the editor must not write an action the card ignores.
+        { name: 'image_tap_action', selector: tapActions },
+        { name: 'range_tap_action', selector: tapActions },
+      ]),
+      section('actions', 'mdi:gesture-tap-button', [
+        { name: 'actions', selector: { select: { multiple: true, mode: 'list', options: actionOptions } } },
+      ]),
+      section('safety', 'mdi:shield-lock-outline', [
+        { name: 'double_confirm_actions', selector: { select: { multiple: true, mode: 'dropdown', options: actionOptions } } },
+        { name: 'confirm_actions', selector: { select: { multiple: true, mode: 'dropdown', options: actionOptions } } },
+        { name: 'disabled_actions', selector: { select: { multiple: true, mode: 'dropdown', options: actionOptions } } },
+      ]),
+      section('details', 'mdi:tune-variant', [
+        { type: 'grid', name: '', schema: [
+          { name: 'tire_min', selector: { number: { min: 1, max: 4, step: 0.1, mode: 'box', unit_of_measurement: 'bar' } } },
+          { name: 'tire_max', selector: { number: { min: 1, max: 4, step: 0.1, mode: 'box', unit_of_measurement: 'bar' } } },
+        ] },
+        { name: 'map_zoom', selector: { number: { min: MAP_ZOOM_MIN, max: MAP_ZOOM_MAX, mode: 'box' } } },
+      ]),
     ]
   }
 
-  /**
-   * The top-level fields show the field's own name, without translation —
-   * it has always been this way, and changing that for all of them is out
-   * of scope for a new option. `map_zoom` is the exception: it exists only
-   * once per catalog (see `editor.map_zoom`), so it gets a translated label
-   * without touching the others. `tire_range` is not in the `ha-form`
-   * schema (it is a list of two numbers, with no selector), but the branch
-   * is ready for when there is one.
-   */
-  private computeLabel = (t: (k: string) => string) => (s: { name: string }): string => {
-    if (s.name === 'map_zoom') return t('editor.map_zoom')
-    if (s.name === 'mate_url') return t('editor.mate_url')
-    if (s.name === 'tire_range') return t('editor.tire_range')
-    if (s.name === 'range_tap_action') return t('editor.range_tap_action')
-    return s.name
+  /** Every field has a label in the user's language, and the ones that need it a line of help. */
+  private computeLabel = (t: (k: string) => string) => (s: { name: string }): string =>
+    (s.name ? t(`editor.${s.name}`) : '')
+
+  private computeHelper = (t: (k: string) => string) => (s: { name: string }): string | undefined => {
+    const key = `editor.${s.name}_help`
+    const text = t(key)
+    return text === key ? undefined : text
   }
 
   private valueChanged(e: CustomEvent<{ value: Record<string, unknown> }>) {
     const raw = { ...e.detail.value }
-    if (raw.language === '') delete raw.language
+    // `tire_min` / `tire_max` exist only in the form: the option is one list.
+    const min = Number(raw.tire_min), max = Number(raw.tire_max)
+    delete raw.tire_min
+    delete raw.tire_max
+    if (Number.isFinite(min) && Number.isFinite(max)) raw.tire_range = clampTireRange([min, max])
+    // What equals the default is not written: the YAML keeps only what the
+    // user chose, and a later change of a default reaches it.
+    for (const key of ['language', 'device', 'name', 'mate_url'] as const) if (raw[key] === '' || raw[key] == null) delete raw[key]
+    if (raw.image === 'auto') delete raw.image
+    if (raw.map_zoom === DEFAULT_MAP_ZOOM) delete raw.map_zoom
+    if (same(raw.tire_range, DEFAULT_TIRE_RANGE)) delete raw.tire_range
+    if (same(raw.actions, DEFAULT_ACTIONS)) delete raw.actions
+    if (same(raw.double_confirm_actions, DEFAULT_DOUBLE_CONFIRM_ACTIONS)) delete raw.double_confirm_actions
+    if (same(raw.confirm_actions, DEFAULT_CONFIRM_ACTIONS)) delete raw.confirm_actions
+    if (same(raw.disabled_actions, [])) delete raw.disabled_actions
     // `sections` no longer exists in the type, but it may exist in
     // configurations that have not been migrated yet — `ha-form` returns
     // everything it was given, so it is here, in the editor, that the dead
@@ -237,6 +260,7 @@ export class LeapmotorCardEditor extends LitElement {
     const onCount = rows.filter(row => row.on).length
     return html`<div class="grid-editor">
       <div class="grid-title">${t('editor.grid')}</div>
+      <div class="grid-help">${t('editor.grid_help')}</div>
       ${rows.map((row, index) => html`
         <div class="grid-row">
           <ha-formfield .label=${t(GROUP_CATALOGUE[row.id].titleKey)}>
@@ -266,6 +290,7 @@ export class LeapmotorCardEditor extends LitElement {
       font-size: 0.85rem; font-weight: 500;
       color: var(--secondary-text-color); margin-bottom: 4px;
     }
+    .grid-help { font-size: 0.8rem; color: var(--secondary-text-color); margin-bottom: 4px; }
     .grid-row { display: flex; align-items: center; gap: 4px; }
     .grid-row ha-formfield { flex: 1 1 auto; min-width: 0; }
   `
@@ -275,11 +300,17 @@ export class LeapmotorCardEditor extends LitElement {
     const language = pickLanguage(this._config.language, this.hass.locale?.language)
     const t = createTranslator(language)
 
+    const [tireMin, tireMax] = clampTireRange(this._config.tire_range)
     const data = {
       image: 'auto',
       actions: DEFAULT_ACTIONS,
+      double_confirm_actions: DEFAULT_DOUBLE_CONFIRM_ACTIONS,
+      confirm_actions: DEFAULT_CONFIRM_ACTIONS,
+      disabled_actions: [],
       map_zoom: DEFAULT_MAP_ZOOM,
       ...this._config,
+      tire_min: tireMin,
+      tire_max: tireMax,
     }
 
     return html`
@@ -288,6 +319,7 @@ export class LeapmotorCardEditor extends LitElement {
         .data=${data}
         .schema=${this.schema(t)}
         .computeLabel=${this.computeLabel(t)}
+        .computeHelper=${this.computeHelper(t)}
         @value-changed=${this.valueChanged}
       ></ha-form>
       ${this.renderGridEditor(t)}

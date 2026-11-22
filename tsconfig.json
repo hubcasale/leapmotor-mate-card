@@ -16,5 +16,5 @@
     "skipLibCheck": true,
     "types": ["vitest/globals"]
   },
-  "include": ["src/**/*.ts", "test/**/*.ts"]
+  "include": ["src/**/*.ts", "test/**/*.ts", "demo/**/*.ts"]
 }

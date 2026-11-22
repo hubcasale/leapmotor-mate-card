@@ -474,7 +474,7 @@ export class LeapmotorClimatePanel extends LitElement {
      * show up at 0.6 instead of the 0.4 of disabled.
      */
     button.plain.toggle.pending:not([disabled]) { opacity: 0.6; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 8px; margin-top: 14px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(56px, 1fr)); gap: 4px; margin-top: 14px; }
     button.plain.tile-btn { flex-direction: column; }
     /* button.plain (theme.ts) sits at specificity (0,1,1); a bare .on class
        (0,1,0) cannot override it, so the on/off color needs the same

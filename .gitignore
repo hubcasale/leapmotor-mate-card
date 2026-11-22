@@ -8,3 +8,4 @@ dist/
 # the card, and they carry more detail about how it was built than anyone
 # installing it needs.
 docs/superpowers/
+demo/demo.js

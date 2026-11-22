@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeAll, describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it, vi } from 'vitest'
 import type { HomeAssistant } from '../src/ha-types'
 import { MATE_NOW, mateHass } from './fixtures/mate-states'
 
@@ -116,5 +116,156 @@ describe('the card in a DOM', () => {
       await settle(el)
     }
     expect(MATE_NOW).toBeDefined()
+  })
+})
+
+describe('the confirmation, in the card', () => {
+  const rowButton = (el: HTMLElement, label: string) => {
+    const row = deep(el.shadowRoot!, 'leapmotor-mate-actions-row')[0] as HTMLElement
+    return [...row.shadowRoot!.querySelectorAll('button')].find(b => b.textContent?.includes(label)) as HTMLButtonElement | undefined
+  }
+  const ask = (el: HTMLElement) => el.shadowRoot!.querySelector('.ask') as HTMLElement | null
+  const askButtons = (el: HTMLElement) => [...el.shadowRoot!.querySelectorAll('.ask-btn')] as HTMLButtonElement[]
+  const wait = (ms: number) => new Promise(r => setTimeout(r, ms))
+
+  async function mounted(config: Record<string, unknown> = {}) {
+    const el = await mount(config)
+    const calls: unknown[][] = []
+    el.hass = { ...mateHass(), callService: vi.fn(async (...a: unknown[]) => { calls.push(a) }) } as unknown as HomeAssistant
+    await settle(el)
+    return { el, calls }
+  }
+
+  it('unlocking asks twice, and the car is only commanded after the second yes', async () => {
+    const { el, calls } = await mounted()
+    rowButton(el, 'Unlock')!.click()
+    await settle(el)
+    expect(ask(el)).not.toBeNull()
+    expect(ask(el)!.textContent).toContain('Confirmation 1 of 2')
+    expect(calls).toHaveLength(0)
+
+    askButtons(el).find(b => b.classList.contains('go'))!.click()
+    await settle(el)
+    expect(ask(el)!.textContent).toContain('Second confirmation')
+    expect(ask(el)!.textContent).toContain('This opens the car')
+    const go = askButtons(el).find(b => b.classList.contains('go'))!
+    // not armed yet: a double tap must not answer both questions
+    expect(go.disabled).toBe(true)
+    expect(calls).toHaveLength(0)
+
+    await wait(800)
+    await settle(el)
+    const armed = askButtons(el).find(b => b.classList.contains('go'))!
+    expect(armed.disabled).toBe(false)
+    armed.click()
+    await settle(el)
+    expect(ask(el)).toBeNull()
+    expect(calls).toEqual([['lock', 'unlock', {}, { entity_id: 'lock.leapmotor_mate_5r1234_door_lock' }]])
+  })
+
+  it('the second question puts "confirm" where "cancel" was', async () => {
+    const { el } = await mounted()
+    rowButton(el, 'Unlock')!.click()
+    await settle(el)
+    expect(askButtons(el).map(b => b.classList.contains('go'))).toEqual([false, true])
+    askButtons(el)[1]!.click()
+    await settle(el)
+    expect(askButtons(el).map(b => b.classList.contains('go'))).toEqual([true, false])
+  })
+
+  it('cancelling at either question commands nothing', async () => {
+    const { el, calls } = await mounted()
+    rowButton(el, 'Unlock')!.click()
+    await settle(el)
+    askButtons(el).find(b => !b.classList.contains('go'))!.click()
+    await settle(el)
+    expect(ask(el)).toBeNull()
+
+    rowButton(el, 'Unlock')!.click()
+    await settle(el)
+    askButtons(el).find(b => b.classList.contains('go'))!.click()
+    await settle(el)
+    askButtons(el).find(b => !b.classList.contains('go'))!.click()
+    await settle(el)
+    expect(ask(el)).toBeNull()
+    expect(calls).toHaveLength(0)
+  })
+
+  it('locking does not ask at all', async () => {
+    const { el, calls } = await mounted()
+    rowButton(el, 'Lock')!.click()
+    await settle(el)
+    expect(ask(el)).toBeNull()
+    expect(calls).toHaveLength(1)
+  })
+
+  it('a function turned off has no button, in the row or in the status sub-view', async () => {
+    const { el } = await mounted({ disabled_actions: ['unlock', 'trunk'] })
+    expect(rowButton(el, 'Unlock')).toBeUndefined()
+    expect(rowButton(el, 'Trunk')).toBeUndefined()
+    expect(rowButton(el, 'Lock')).toBeDefined()
+  })
+
+  it('with the double list emptied, unlocking goes straight through', async () => {
+    const { el, calls } = await mounted({ double_confirm_actions: [] })
+    rowButton(el, 'Unlock')!.click()
+    await settle(el)
+    expect(ask(el)).toBeNull()
+    expect(calls).toHaveLength(1)
+  })
+})
+
+describe('the tap on the car', () => {
+  const picture = (el: HTMLElement) => (deep(el.shadowRoot!, 'leapmotor-mate-hero')[0] as HTMLElement).shadowRoot!.querySelector('.image') as HTMLElement
+
+  it('is plain when the card does not know where Mate is', async () => {
+    expect(picture(await mount()).localName).toBe('div')
+  })
+
+  it('opens Mate when mate_url is set', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    const el = await mount({ mate_url: 'https://mate.example.com' })
+    expect(picture(el).localName).toBe('button')
+    picture(el).click()
+    expect(open).toHaveBeenCalledWith('https://mate.example.com', '_blank', 'noreferrer')
+    open.mockRestore()
+  })
+
+  it('does what image_tap_action says instead, `none` included', async () => {
+    const el = await mount({ mate_url: 'https://mate.example.com', image_tap_action: { action: 'none' } })
+    expect(picture(el).localName).toBe('div')
+  })
+})
+
+describe('the editor', () => {
+  it('lays the options out in sections, one per function, each field labelled', async () => {
+    const ed = document.createElement('leapmotor-mate-card-editor') as unknown as HTMLElement & { hass: HomeAssistant; setConfig(c: unknown): void; updateComplete: Promise<unknown> }
+    ed.setConfig({ type: 'custom:leapmotor-mate-card' })
+    ed.hass = { ...mateHass(), locale: { language: 'it' } }
+    document.body.appendChild(ed)
+    await ed.updateComplete
+    const form = ed.shadowRoot!.querySelector('ha-form') as unknown as {
+      schema: { title: string; schema: { name: string; schema?: { name: string }[] }[] }[]
+      computeLabel: (s: { name: string }) => string
+      data: Record<string, unknown>
+    }
+    expect(form.schema.map(s => s.title)).toEqual(['Veicolo', 'Immagine e tocchi', 'Azioni rapide', 'Sicurezza', 'Pneumatici e mappa'])
+    const names = form.schema.flatMap(s => s.schema.flatMap(f => (f.schema ? f.schema.map(g => g.name) : [f.name])))
+    for (const name of names) expect(form.computeLabel({ name }), name).not.toMatch(/^editor\./)
+    expect(names).toEqual(expect.arrayContaining(['mate_url', 'image_tap_action', 'double_confirm_actions', 'confirm_actions', 'disabled_actions', 'tire_min', 'tire_max']))
+    expect(form.data.double_confirm_actions).toEqual(['unlock', 'trunk', 'windows', 'sunshade'])
+  })
+
+  it('writes only what differs from the defaults', async () => {
+    const ed = document.createElement('leapmotor-mate-card-editor') as unknown as HTMLElement & { hass: HomeAssistant; setConfig(c: unknown): void; updateComplete: Promise<unknown> }
+    ed.setConfig({ type: 'custom:leapmotor-mate-card' })
+    ed.hass = mateHass()
+    document.body.appendChild(ed)
+    await ed.updateComplete
+    const got: unknown[] = []
+    ed.addEventListener('config-changed', e => got.push((e as CustomEvent).detail.config))
+    const form = ed.shadowRoot!.querySelector('ha-form') as unknown as HTMLElement & { data: Record<string, unknown> }
+    form.dispatchEvent(new CustomEvent('value-changed', { detail: { value: { ...form.data, disabled_actions: ['windows'], tire_min: 2.2, tire_max: 2.8 } } }))
+    expect(got).toEqual([{ type: 'custom:leapmotor-mate-card', disabled_actions: ['windows'], tire_range: [2.2, 2.8] }])
   })
 })

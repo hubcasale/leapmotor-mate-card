@@ -27,6 +27,8 @@ export class LeapmotorOpenings extends LitElement {
   @property({ attribute: false }) t!: TranslateFn
   @property({ attribute: false }) map!: EntityMap
   @property({ type: String }) pending?: ActionId
+  /** Functions the owner turned off: they are offered nowhere. */
+  @property({ attribute: false }) disabledActions: readonly ActionId[] = []
 
   private openWindowCount(): number {
     return Object.values(this.state.openings.windows).filter(isWindowOpen).length
@@ -160,7 +162,7 @@ export class LeapmotorOpenings extends LitElement {
   }
 
   private disabled(action: ActionId): boolean {
-    if (!isActionAvailable(action, this.state, this.map)) return true
+    if (!isActionAvailable(action, this.state, this.map, this.disabledActions)) return true
     if (this.state.activity === 'driving' && BLOCKED_WHILE_DRIVING.includes(action)) return true
     return this.pending !== undefined
   }
@@ -178,7 +180,7 @@ export class LeapmotorOpenings extends LitElement {
    * silently.
    */
   private button(action: ActionId | undefined) {
-    if (!action || !isActionAvailable(action, this.state, this.map)) return nothing
+    if (!action || !isActionAvailable(action, this.state, this.map, this.disabledActions)) return nothing
     const label = actionLabel(action, this.state, this.t)
     return html`<button
       class="do plain ${this.pending === action ? 'busy' : ''}"

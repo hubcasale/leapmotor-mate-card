@@ -16,7 +16,9 @@ layer, the actions and the climate panel were rewritten for Mate; the look —
 layout, groups, drawings — is the original author's work. Licence:
 GPL-3.0, like the original.
 
-![The card's drawings: side silhouette and top view with tyre pressures](images/drawings.png)
+![The card: home view, vehicle status and tyre pressures](images/card.png)
+
+![The climate sub-view, charging, and the dark theme](images/climate.png)
 
 ## Requirements
 
@@ -61,8 +63,10 @@ That is all: the card finds your car by itself. A fuller example:
 type: custom:leapmotor-mate-card
 name: My B10
 language: en
+mate_url: http://192.168.1.10:4000
 actions: [unlock, lock, trunk, windows, findVehicle, sunshade]
-confirm_actions: [unlock]
+double_confirm_actions: [unlock, trunk, windows, sunshade]
+disabled_actions: []
 grid: [charging, status, climate, tires, trip, location]
 tire_range: [2.0, 2.6]
 ```
@@ -75,18 +79,57 @@ tire_range: [2.0, 2.6]
 | `language` | Home Assistant's | `en`, `it` or `pt`. |
 | `image` | `auto` | `auto` shows the car's picture from Mate if `mate_url` is set, else the drawn silhouette, `entity` only a picture, `none` nothing, or a URL of your own photo. |
 | `actions` | `[unlock, lock, trunk, windows, findVehicle, sunshade]` | The buttons of the action row — see below. |
-| `confirm_actions` | `[unlock]` | Actions that ask for confirmation first. |
+| `double_confirm_actions` | `[unlock, trunk, windows, sunshade]` | Actions that ask **twice** before opening the car — see [Safety](#safety). |
+| `confirm_actions` | `[]` | Actions that ask once. |
+| `disabled_actions` | `[]` | Functions turned off: no button anywhere in the card. |
+| `image_tap_action` | opens Mate | What a tap on the car does. By default it opens `mate_url` in a new tab; any Home Assistant action, or `none`. |
 | `grid` | all groups | Which groups the grid shows, and in what order. An entry is a group name or `{group, icon, title, summary}`. |
 | `tire_range` | `[2.0, 2.6]` | Normal tyre pressure, in bar; outside it a tyre is flagged. |
 | `map_zoom` | `15` | Zoom of the location map. |
 | `range_tap_action` | `more-info` | What a tap on the range does (Home Assistant's action vocabulary). |
 | `entities` | none | Overrides which entity a logical name uses — see below. |
 
+### Safety
+
+Opening the car from a dashboard should never happen by accident.
+
+![The two confirmations before unlocking](images/confirm.png)
+
+- **Two confirmations before opening.** Unlocking, opening the trunk, the
+  windows and the sunshade ask twice (`double_confirm_actions`). The second
+  question puts *Confirm* where *Cancel* was and arms it only after a moment,
+  so a double tap on the same spot cancels. A question left unanswered
+  withdraws itself after 20 seconds.
+- **Only opening asks.** Locking, and closing the trunk, the windows or the
+  sunshade, go straight through — unless you list them in `confirm_actions`,
+  which asks once.
+- **Functions can be turned off.** Anything in `disabled_actions` has no button
+  in the action row, in the status sub-view or on the lock pill, and cannot be
+  triggered from the card at all.
+- The lock pill in the header always asks, in both directions, and
+  `unlock`, `lock`, `trunk`, `windows` and `sunshade` are refused while the car
+  is moving.
+
+```yaml
+# never unlock or open the trunk from this dashboard; ask once before the horn
+disabled_actions: [unlock, trunk]
+confirm_actions: [findVehicle]
+```
+
+### The visual editor
+
+Every option above is in the card's editor, grouped by function: **Vehicle**
+(name, car, language), **Picture and taps** (Mate's address, picture, tap on
+the car, tap on the range), **Quick actions**, **Safety** (ask twice, ask
+once, turned off), **Tyres and map**, and the **Groups** shown with their
+order. It writes to the YAML only what differs from the defaults.
+
 ### The car's picture
 
 Mate serves the car's own picture — the one the Leapmotor app shows, in your
 car's colour — at `/api/car-picture` of its web interface. Set `mate_url` and
 the header shows it; if it cannot be loaded the card falls back to the drawing.
+A tap on the car then opens Mate (change it with `image_tap_action`).
 
 ```yaml
 type: custom:leapmotor-mate-card
@@ -117,6 +160,9 @@ to `config/www/b10.png` and set `image: /local/b10.png`.
 `unlockCharger`, `quickCool`, `quickHeat`, `quickVentilation`, `defrost`,
 `climate`, `climateOff`, `batteryPreheat`, `steeringWheelHeat`, `mirrorHeat`,
 `driverSeatHeat`, `driverSeatVent`, `passengerSeatHeat`, `passengerSeatVent`.
+
+The action row groups its buttons by function — access, openings, climate,
+charging, vehicle — whatever order you list them in.
 
 Mate commands most functions with a pair of buttons, so the card turns a tap
 into the button that reverses what the car reports: `trunk` opens or closes,
@@ -196,6 +242,7 @@ npm ci
 npm test          # unit tests and a render test in a DOM
 npm run typecheck
 npm run build     # dist/leapmotor-mate-card.js
+npm run demo      # demo/index.html: the card against a fake Mate car, no Home Assistant needed
 ```
 
 Releases are built by the `build` workflow when a `v*` tag is pushed.

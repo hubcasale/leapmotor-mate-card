@@ -1,7 +1,7 @@
 import { LitElement, css, html, nothing, type TemplateResult } from 'lit'
 import { customElement, state as internalState } from 'lit/decorators.js'
 import {
-  actionLabel, decideAction, forgetRequest, lockToggleAction,
+  actionLabel, decideAction, forgetRequest, lockToggleAction, opensCar, protectionOf,
   pruneRequests, resolveAction,
   type ActionEventDetail, type ActionPayload,
   type SeatLevels, type SeatRequests, type ServiceCall,
@@ -36,7 +36,7 @@ import './sections/tires'
 import './sections/trip'
 import './sections/comfort'
 
-export const CARD_VERSION = '0.5.3'
+export const CARD_VERSION = '0.6.0'
 
 
 console.info(
@@ -61,6 +61,11 @@ console.info(
  */
 const CORE_KEYS: LogicalKey[] = ['battery', 'lock']
 
+/** How long the second confirmation's button stays inert, so a double tap cannot answer both. */
+const CONFIRM_ARM_MS = 700
+/** How long a question waits before it withdraws itself. */
+const CONFIRM_TIMEOUT_MS = 20_000
+
 /** Where a missing logical name was looked for, to show in the warning so it can be mapped under `entities:`. */
 function expectedEntity(key: LogicalKey, carId?: string): string {
   const def = ENTITY_KEYS[key] as { domain: string; slug: string | null }
@@ -73,6 +78,17 @@ export class LeapmotorCard extends LitElement {
   @internalState() private _config?: LeapmotorCardConfig
   @internalState() private _pending?: ActionId
   @internalState() private _openGroup?: GroupId
+  /**
+   * The question on screen while an action waits for its confirmation. It is
+   * drawn inside the card, not with `window.confirm`: a native dialog cannot
+   * ask twice in a way that a double tap does not answer by accident, and it
+   * looks foreign in the Home Assistant apps.
+   */
+  @internalState() private _ask?: {
+    label: string; step: 1 | 2; steps: 1 | 2; opens: boolean; armed: boolean
+    answer: (ok: boolean) => void
+  }
+  private _askTimer?: number
   /** The group to return focus to after closing. See spec §4.5. */
   private _focusGroup?: GroupId
   /**
@@ -101,6 +117,8 @@ export class LeapmotorCard extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback()
     this._seatRequests = {}
+    // A card that leaves the screen takes its unanswered question with it.
+    this._ask?.answer(false)
   }
 
   public static async getConfigElement() {
@@ -108,14 +126,9 @@ export class LeapmotorCard extends LitElement {
     return document.createElement('leapmotor-mate-card-editor')
   }
 
-  public static getStubConfig(hass: HomeAssistant): LeapmotorCardConfig {
-    const devices = [...new Set(
-      Object.values(hass?.entities ?? {})
-        .filter(e => e.platform === 'leapmotor')
-        .map(e => e.device_id)
-        .filter((d): d is string => !!d),
-    )]
-    return { type: 'custom:leapmotor-mate-card', ...(devices.length === 1 ? { device: devices[0] } : {}) }
+  /** What the card picker starts from: the card finds a single car by itself. */
+  public static getStubConfig(): LeapmotorCardConfig {
+    return { type: 'custom:leapmotor-mate-card' }
   }
 
   public setConfig(config: LeapmotorCardConfig): void {
@@ -249,7 +262,7 @@ export class LeapmotorCard extends LitElement {
     // in-progress lock, availability, and the need for confirmation cannot
     // live here, where no test can reach them. What remains here is the DOM
     // wiring.
-    const decision = decideAction(action, state, map, this._config?.confirm_actions, payload, forceConfirm)
+    const decision = decideAction(action, state, map, protectionOf(this._config), payload, forceConfirm)
     if (decision.kind === 'blocked' || decision.kind === 'unavailable') return
 
     // `answer` requires the user's response as an argument, and it is the
@@ -259,7 +272,7 @@ export class LeapmotorCard extends LitElement {
     // alternating and their keys are `action.trunk_open` / `action.trunk_close`
     // and `action.windows_open` / `action.windows_close`.
     const call = decision.kind === 'confirm'
-      ? decision.answer(window.confirm(t('confirm', { action: actionLabel(action, state, t) })))
+      ? decision.answer(await this.askConfirm(actionLabel(action, state, t), decision.steps, opensCar(action, state)))
       : decision.call
     if (!call || !this._hass) return
 
@@ -269,6 +282,52 @@ export class LeapmotorCard extends LitElement {
     } finally {
       this._pending = undefined
     }
+  }
+
+  /**
+   * Asks for the confirmation, once or twice, and resolves to whether every
+   * question was answered yes. The second question's button is armed only
+   * after a moment and sits where "cancel" was in the first, so a double tap
+   * on the same spot cancels instead of confirming. An unanswered question
+   * withdraws itself: a card left asking must not be one stray tap away from
+   * opening the car hours later.
+   */
+  private async askConfirm(label: string, steps: 1 | 2, opens: boolean): Promise<boolean> {
+    // A new question replaces an unanswered one, which counts as a no.
+    this._ask?.answer(false)
+    for (let step = 1 as 1 | 2; step <= steps; step = 2) {
+      const ok = await new Promise<boolean>(resolve => {
+        this._ask = { label, step, steps, opens, armed: step === 1, answer: resolve }
+        window.clearTimeout(this._askTimer)
+        if (step === 2) window.setTimeout(() => { if (this._ask?.step === 2) this._ask = { ...this._ask, armed: true } }, CONFIRM_ARM_MS)
+        this._askTimer = window.setTimeout(() => resolve(false), CONFIRM_TIMEOUT_MS)
+      })
+      window.clearTimeout(this._askTimer)
+      this._ask = undefined
+      if (!ok) return false
+      if (step === steps) break
+    }
+    return true
+  }
+
+  private renderAsk(t: TranslateFn) {
+    const ask = this._ask
+    if (!ask) return nothing
+    const second = ask.step === 2
+    const cancel = html`<button class="ask-btn" @click=${() => ask.answer(false)}>${t('confirm.cancel')}</button>`
+    const go = html`<button
+      class="ask-btn go ${second ? 'final' : ''}" ?disabled=${!ask.armed}
+      @click=${() => ask.answer(true)}
+    >${t(second || ask.steps === 1 ? 'confirm.confirm' : 'confirm.continue')}</button>`
+    return html`<div class="ask" role="alertdialog" aria-modal="true" aria-label=${t('confirm', { action: ask.label })}>
+      <div class="ask-box">
+        <ha-icon icon=${second ? 'mdi:shield-alert-outline' : 'mdi:shield-lock-outline'}></ha-icon>
+        <div class="ask-title">${t(second ? 'confirm.second' : 'confirm', { action: ask.label })}</div>
+        ${second && ask.opens ? html`<div class="ask-note">${t('confirm.opens')}</div>` : nothing}
+        ${ask.steps === 2 ? html`<div class="ask-step muted">${t('confirm.step', { step: ask.step, steps: ask.steps })}</div>` : nothing}
+        <div class="ask-actions">${second ? html`${go}${cancel}` : html`${cancel}${go}`}</div>
+      </div>
+    </div>`
   }
 
   /**
@@ -420,6 +479,14 @@ export class LeapmotorCard extends LitElement {
     // on screen actually came from — `buildVehicleState` picks between
     // three, and `state.range.entityId` is the one that won.
     const rangeTap = resolveTapAction(config.range_tap_action, state.range?.entityId)
+    // The car's picture opens Mate's own web interface when the card knows
+    // where it is; `image_tap_action` says otherwise, `none` included.
+    const mateUrl = config.mate_url?.trim()
+    const imageTap = resolveTapAction(
+      config.image_tap_action ?? (mateUrl ? { action: 'url', url_path: mateUrl } : { action: 'none' }),
+      undefined,
+    )
+    const protection = protectionOf(config)
 
     const onAction = (e: CustomEvent<ActionEventDetail>) => {
       void this.callAction(e.detail.action, state, map, t, e.detail.payload)
@@ -513,6 +580,7 @@ export class LeapmotorCard extends LitElement {
           return html`
             <leapmotor-mate-openings
               .state=${state} .t=${t} .map=${map} .pending=${this._pending}
+              .disabledActions=${protection.disabled}
             ></leapmotor-mate-openings>
             `
         case 'climate':
@@ -548,8 +616,10 @@ export class LeapmotorCard extends LitElement {
       @leapmotor-mate-set-switch=${onSetSwitch}
       @leapmotor-mate-seat=${onSeat}
       @leapmotor-mate-range-tap=${onRangeTap}
+      @leapmotor-mate-image-tap=${() => this.performTap(imageTap)}
       @leapmotor-mate-lock-tap=${onLockTap}
     >
+      ${this.renderAsk(t)}
       <div class="body">
         ${/*
            * `sections` is no longer a field of `LeapmotorCardConfig`, so
@@ -570,13 +640,16 @@ export class LeapmotorCard extends LitElement {
           .language=${language} .imageUrl=${imageUrl}
           .showImage=${showImage} .allowSilhouette=${allowSilhouette}
           .compact=${openGroup !== undefined}
-          .rangeTap=${rangeTap} .map=${map} .pending=${this._pending}
+          .rangeTap=${rangeTap} .imageTap=${imageTap} .disabled=${protection.disabled}
+          .map=${map} .pending=${this._pending}
         ></leapmotor-mate-hero>
 
         ${openGroup === undefined
           ? html`
             <leapmotor-mate-actions-row
-              .state=${state} .t=${t} .map=${map} .actions=${actions} .pending=${this._pending}
+              .state=${state} .t=${t} .map=${map} .pending=${this._pending}
+              .actions=${actions.filter(a => !protection.disabled.includes(a))}
+              .disabledActions=${protection.disabled}
             ></leapmotor-mate-actions-row>
 
             ${grid.groups.length > 0
@@ -623,8 +696,35 @@ export class LeapmotorCard extends LitElement {
   }
 
   static override styles = [sharedStyles, css`
-    ha-card { overflow: hidden; }
+    ha-card { overflow: hidden; position: relative; }
     .body { padding: var(--lm-gap); }
+    /*
+     * The confirmation covers the card it belongs to, and only it: the
+     * question is about this car, and the rest of the dashboard stays usable.
+     */
+    .ask {
+      position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 16px;
+      background: color-mix(in srgb, var(--card-background-color, #fff) 82%, transparent);
+      backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+    }
+    .ask-box {
+      width: min(100%, 320px); box-sizing: border-box; padding: 18px 16px 14px; border-radius: 16px;
+      background: var(--card-background-color, #fff); color: var(--primary-text-color);
+      border: 1px solid var(--divider-color, rgba(127, 127, 127, 0.3));
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.22); text-align: center;
+    }
+    .ask-box ha-icon { --mdc-icon-size: 34px; color: var(--lm-warn); }
+    .ask-title { font-size: 1.1rem; font-weight: 600; margin-top: 8px; }
+    .ask-note { margin-top: 6px; font-size: 0.9rem; color: var(--lm-alert); }
+    .ask-step { margin-top: 6px; font-size: 0.78rem; }
+    .ask-actions { display: flex; gap: 10px; margin-top: 16px; }
+    .ask-btn {
+      flex: 1 1 0; min-height: 44px; border-radius: 22px; border: 1px solid var(--divider-color, rgba(127, 127, 127, 0.3));
+      background: transparent; color: inherit; font: inherit; font-weight: 500; cursor: pointer;
+    }
+    .ask-btn.go { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
+    .ask-btn.go.final { background: var(--lm-alert); border-color: var(--lm-alert); }
+    .ask-btn[disabled] { opacity: 0.45; cursor: default; }
     .loading { color: var(--lm-muted); }
     .missing { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 0.75rem; }
     .missing ha-icon { --mdc-icon-size: 16px; }

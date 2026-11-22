@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   BLOCKED_WHILE_DRIVING, PAYLOAD_ACTIONS, actionIcon, actionLabel, decideAction, forgetRequest,
-  isActionAvailable, lockPillShape, lockToggleAction, pendingValue, pruneRequests, resolveAction, shownLevel,
+  isActionAvailable, lockPillShape, lockToggleAction, opensCar, pendingValue, protectionOf, pruneRequests,
+  resolveAction, shownLevel, type Protection,
 } from '../src/actions'
 import { resolveEntities } from '../src/resolver'
 import { buildVehicleState } from '../src/vehicle-state'
@@ -30,6 +31,10 @@ function ctx(overrides: Record<string, string | null> = {}) {
   const { map } = resolveEntities(hass, { type: 'custom:leapmotor-mate-card' })
   return { map, state: buildVehicleState(hass, map, REAL_NOW) }
 }
+
+/** No protection at all: nothing asks, nothing is off. */
+const OPEN: Protection = { confirm: [], double: [], disabled: [] }
+const only = (p: Partial<Protection>): Protection => ({ ...OPEN, ...p })
 
 const press = (slug: string) => ({ domain: 'button', service: 'press', entityId: eid('button', slug) })
 
@@ -301,27 +306,75 @@ describe('decideAction', () => {
       // No payload on purpose: the block is decided before the action is
       // resolved, so a payload action gives 'blocked' or 'unavailable',
       // never 'ready', and it's the 'blocked' case being measured here.
-      const blocked = decideAction(action, state, map, []).kind === 'blocked'
+      const blocked = decideAction(action, state, map, OPEN).kind === 'blocked'
       expect(blocked, action).toBe(BLOCKED_WHILE_DRIVING.includes(action))
     }
   })
 
-  it('asks for confirmation for the actions in the list, and the call only goes out with a yes', () => {
+  it('asks twice before unlocking by default, and the call only goes out with a yes', () => {
     const { map, state } = ctx()
     const decision = decideAction('unlock', state, map, undefined)
     expect(decision.kind).toBe('confirm')
     if (decision.kind !== 'confirm') return
+    expect(decision.steps).toBe(2)
     expect(decision.answer(false)).toBeUndefined()
     expect(decision.answer(true)).toEqual({
       domain: 'lock', service: 'unlock', entityId: eid('lock', 'door_lock'),
     })
   })
 
-  it('respects the confirmation list from the configuration', () => {
+  it('asks twice by default for everything that opens the car, and for nothing else', () => {
     const { map, state } = ctx()
-    expect(decideAction('unlock', state, map, ['trunk']).kind).toBe('ready')
-    expect(decideAction('trunk', state, map, ['trunk']).kind).toBe('confirm')
-    expect(decideAction('trunk', state, map, []).kind).toBe('ready')
+    const steps = (action: ActionId) => { const d = decideAction(action, state, map, undefined); return d.kind === 'confirm' ? d.steps : 0 }
+    expect((['unlock', 'trunk', 'windows', 'sunshade'] as ActionId[]).map(steps)).toEqual([2, 2, 2, 2])
+    expect((['lock', 'findVehicle', 'climate', 'quickCool', 'unlockCharger'] as ActionId[]).map(steps)).toEqual([0, 0, 0, 0, 0])
+  })
+
+  it('asks twice to open and not at all to close', () => {
+    const open = ctx({ 'binary_sensor/trunk': 'on', 'binary_sensor/window_front_left': 'on', 'binary_sensor/sunshade': 'on' })
+    for (const action of ['trunk', 'windows', 'sunshade'] as ActionId[]) {
+      expect(opensCar(action, open.state), action).toBe(false)
+      expect(decideAction(action, open.state, open.map, undefined).kind, action).toBe('ready')
+    }
+    const closed = ctx()
+    for (const action of ['trunk', 'windows', 'sunshade'] as ActionId[]) expect(opensCar(action, closed.state), action).toBe(true)
+  })
+
+  it('treats an unreadable state as "would open": it asks twice', () => {
+    const { map, state } = ctx({ 'binary_sensor/trunk': 'unavailable' })
+    const d = decideAction('trunk', state, map, undefined)
+    expect(d.kind === 'confirm' && d.steps).toBe(2)
+  })
+
+  it('respects the lists from the configuration', () => {
+    const { map, state } = ctx()
+    // taken out of the double list, unlocking no longer asks
+    expect(decideAction('unlock', state, map, protectionOf({ double_confirm_actions: [] })).kind).toBe('ready')
+    // a single confirmation for an action of the owner's choice
+    const once = decideAction('findVehicle', state, map, only({ confirm: ['findVehicle'] }))
+    expect(once.kind === 'confirm' && once.steps).toBe(1)
+    // an action with no direction in the double list asks twice every time
+    const twice = decideAction('climate', state, map, only({ double: ['climate'] }))
+    expect(twice.kind === 'confirm' && twice.steps).toBe(2)
+    // the double list wins over the single one
+    const both = decideAction('unlock', state, map, only({ confirm: ['unlock'], double: ['unlock'] }))
+    expect(both.kind === 'confirm' && both.steps).toBe(2)
+  })
+
+  it('a function turned off is unavailable, whatever else is true', () => {
+    const { map, state } = ctx()
+    const off = only({ disabled: ['unlock', 'trunk'] })
+    expect(decideAction('unlock', state, map, off).kind).toBe('unavailable')
+    expect(decideAction('trunk', state, map, off, undefined, true).kind).toBe('unavailable')
+    expect(decideAction('lock', state, map, off).kind).toBe('ready')
+    expect(isActionAvailable('unlock', state, map, off.disabled)).toBe(false)
+    expect(isActionAvailable('lock', state, map, off.disabled)).toBe(true)
+  })
+
+  it('protectionOf gives the defaults for a missing or malformed list', () => {
+    expect(protectionOf(undefined)).toEqual({ confirm: [], double: ['unlock', 'trunk', 'windows', 'sunshade'], disabled: [] })
+    expect(protectionOf({ double_confirm_actions: 'unlock' as never }).double).toEqual(['unlock', 'trunk', 'windows', 'sunshade'])
+    expect(protectionOf({ disabled_actions: ['windows'] }).disabled).toEqual(['windows'])
   })
 
   it('an action with no entity is not executable', () => {
@@ -336,9 +389,10 @@ describe('decideAction', () => {
     // which would change the actions-row button for everyone who already
     // uses it.
     const { map, state } = ctx()
-    const decision = decideAction('lock', state, map, [], undefined, true)
+    const decision = decideAction('lock', state, map, OPEN, undefined, true)
     expect(decision.kind).toBe('confirm')
     if (decision.kind !== 'confirm') return
+    expect(decision.steps).toBe(1)
     expect(decision.answer(false)).toBeUndefined()
     expect(decision.answer(true)).toEqual({
       domain: 'lock', service: 'lock', entityId: eid('lock', 'door_lock'),
@@ -347,12 +401,12 @@ describe('decideAction', () => {
 
   it('forceConfirm does not get past the while-driving block', () => {
     const { map, state } = ctx({ 'sensor/state': 'driving' })
-    expect(decideAction('lock', state, map, [], undefined, true).kind).toBe('blocked')
+    expect(decideAction('lock', state, map, OPEN, undefined, true).kind).toBe('blocked')
   })
 
   it('forceConfirm does not invent a call for an action with no entity', () => {
     const { state } = ctx()
-    expect(decideAction('lock', state, {}, [], undefined, true).kind).toBe('unavailable')
+    expect(decideAction('lock', state, {}, OPEN, undefined, true).kind).toBe('unavailable')
   })
 })
 
@@ -360,6 +414,13 @@ describe('lockPillShape', () => {
   it('is a live button when the car is parked and there is a lock entity', () => {
     const { map, state } = ctx()
     expect(lockPillShape(state, map, undefined)).toBe('button')
+  })
+
+  it('goes back to plain text when the owner turned the lock action off', () => {
+    const { map, state } = ctx()
+    // the car is locked, so the pill would offer `unlock`
+    expect(lockPillShape(state, map, undefined, ['unlock'])).toBe('text')
+    expect(lockPillShape(state, map, undefined, ['trunk'])).toBe('button')
   })
 
   it('goes back to plain text with no lock entity', () => {

@@ -39,6 +39,10 @@ export class LeapmotorHero extends LitElement {
    * inert text.
    */
   @property({ attribute: false }) rangeTap: TapDecision = { kind: 'none' }
+  /** What a tap on the car does; `none` leaves the picture plain. */
+  @property({ attribute: false }) imageTap: TapDecision = { kind: 'none' }
+  /** Functions the owner turned off. */
+  @property({ attribute: false }) disabled: readonly ActionId[] = []
 
   /**
    * The two the lock pill needs to know whether it can command the car:
@@ -169,7 +173,7 @@ export class LeapmotorHero extends LitElement {
   private lockBlock() {
     const { lock } = this.state
     const classes = `lock ${lock.stale ? 'stale' : ''}`
-    const shape = lockPillShape(this.state, this.map, this.pending)
+    const shape = lockPillShape(this.state, this.map, this.pending, this.disabled)
     if (shape === 'text') return html`<div class=${classes}>${this.lockBody()}</div>`
     const label = actionLabel(lockToggleAction(this.state), this.state, this.t)
     return html`<button
@@ -201,11 +205,20 @@ export class LeapmotorHero extends LitElement {
       </div>
 
       ${this.showImage
-        ? html`<div class="image">
-            ${this.imageUrl && !this.imageFailed
+        ? (() => {
+            const picture = this.imageUrl && !this.imageFailed
               ? html`<img src=${this.imageUrl} alt=${this.name} @error=${() => { this.imageFailed = true }} />`
-              : (this.allowSilhouette ? CAR_SILHOUETTE : nothing)}
-          </div>`
+              : (this.allowSilhouette ? CAR_SILHOUETTE : nothing)
+            // A button only when the tap does something, like the range.
+            return this.imageTap.kind === 'none'
+              ? html`<div class="image">${picture}</div>`
+              : html`<button
+                  class="plain image"
+                  title=${this.t('image_tap')}
+                  aria-label=${this.t('image_tap')}
+                  @click=${() => this.fire('leapmotor-mate-image-tap')}
+                >${picture}</button>`
+          })()
         : nothing}
 
       ${activity === 'unknown'
@@ -245,6 +258,7 @@ export class LeapmotorHero extends LitElement {
     .lock-text { font-size: 1.05rem; line-height: 1.2; }
     .ago { font-size: 0.75rem; }
     .image { display: flex; justify-content: center; margin: var(--lm-gap) 0 4px; }
+    button.plain.image { width: 100%; cursor: pointer; }
     .image img, .image svg { max-width: 100%; height: auto; max-height: 160px; }
     .activity { text-align: center; font-size: 0.95rem; }
     .compact-row { display: flex; align-items: center; gap: 10px; min-width: 0; }

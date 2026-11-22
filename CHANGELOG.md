@@ -5,6 +5,34 @@ Every notable change to this project is recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] — 2026-11-22
+
+### Added
+
+- **Two confirmations before opening the car.** Unlocking and opening the
+  trunk, the windows or the sunshade ask twice, in a dialog drawn inside the
+  card: the second question swaps the buttons and arms *Confirm* only after a
+  moment, and an unanswered question withdraws itself. New option
+  `double_confirm_actions`; closing and locking never ask twice.
+- **Functions can be turned off** with `disabled_actions`: no button in the
+  action row, the status sub-view or the lock pill, and no call.
+- **A tap on the car opens Leapmotor Mate** when `mate_url` is set; new option
+  `image_tap_action` for any other Home Assistant action, or `none`.
+- **The visual editor is organised by function** — Vehicle, Picture and taps,
+  Quick actions, Safety, Tyres and map, Groups — with every field labelled and
+  explained in the user's language, the tyre range as two fields, and only
+  what differs from the defaults written to the YAML.
+- **The action row groups its buttons by function** (access, openings,
+  climate, charging, vehicle).
+- A demo page (`npm run demo`) that mounts the card against a fake Mate car;
+  the screenshots in the README come from it.
+
+### Changed
+
+- `confirm_actions` now defaults to empty: unlocking moved to the double list.
+- The confirmation no longer uses the browser's native dialog.
+- The five climate buttons fit on one row.
+
 ## [0.5.3] — 2026-11-08
 
 ### Fixed

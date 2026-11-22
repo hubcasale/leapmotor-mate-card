@@ -1,6 +1,9 @@
 import { isWindowOpen } from './format'
 import type { TranslateFn } from './localize'
-import { DEFAULT_CONFIRM_ACTIONS, type ActionId, type EntityMap, type VehicleState } from './types'
+import {
+  DEFAULT_CONFIRM_ACTIONS, DEFAULT_DOUBLE_CONFIRM_ACTIONS,
+  type ActionId, type EntityMap, type LeapmotorCardConfig, type VehicleState,
+} from './types'
 import type { LogicalKey, SeatLevelKey } from './keys'
 
 export interface ServiceCall {
@@ -76,48 +79,96 @@ export type SeatRequests = Partial<Record<SeatLevelKey, PendingRequest<number>>>
 export type SeatLevels = Partial<Record<SeatLevelKey, number>>
 
 /**
+ * How the configuration protects the actions: which ask once, which ask
+ * twice, and which are turned off. Built once from the config by
+ * `protectionOf`, so the defaults live in a single place.
+ */
+export interface Protection {
+  confirm: readonly ActionId[]
+  double: readonly ActionId[]
+  disabled: readonly ActionId[]
+}
+
+const list = (value: unknown, fallback: readonly ActionId[]): readonly ActionId[] =>
+  (Array.isArray(value) ? (value as ActionId[]) : fallback)
+
+export function protectionOf(config: Pick<LeapmotorCardConfig, 'confirm_actions' | 'double_confirm_actions' | 'disabled_actions'> | undefined): Protection {
+  return {
+    confirm: list(config?.confirm_actions, DEFAULT_CONFIRM_ACTIONS),
+    double: list(config?.double_confirm_actions, DEFAULT_DOUBLE_CONFIRM_ACTIONS),
+    disabled: list(config?.disabled_actions, []),
+  }
+}
+
+const NO_PROTECTION: Protection = protectionOf(undefined)
+
+/**
+ * Whether this tap would open the car up. The alternating actions only open
+ * in one direction, and an unreadable state counts as "would open" — it is
+ * what `resolveAction` does with it, and the cautious reading. An action with
+ * no direction at all (find, climate…) counts as true, so that putting it in
+ * the double list asks twice every time.
+ */
+export function opensCar(action: ActionId, state: VehicleState): boolean {
+  switch (action) {
+    case 'lock': return false
+    case 'trunk': return state.openings.trunk !== true
+    case 'windows': return !anyWindowOpen(state)
+    case 'sunshade': return state.openings.roof !== true
+    default: return true
+  }
+}
+
+/** How many times this tap asks before acting: 0, 1 or 2. */
+export function confirmSteps(action: ActionId, state: VehicleState, protection: Protection, forceConfirm?: boolean): 0 | 1 | 2 {
+  if (protection.double.includes(action) && opensCar(action, state)) return 2
+  return forceConfirm || protection.confirm.includes(action) ? 1 : 0
+}
+
+/**
  * What to do with a tap on an action, decided without touching the DOM or
  * `hass`.
  *
  * The `confirm` variant doesn't carry the call: it carries a function that
- * **requires** the user's answer to return it. This is on purpose — this way
- * there's no way to skip confirmation without breaking the build, and the
- * same goes for the first two cases, which have no `call` at all to read.
+ * **requires** the user's answer to return it, and says how many times the
+ * question must be asked (`steps`). This is on purpose — this way there's no
+ * way to skip confirmation without breaking the build, and the same goes for
+ * the first two cases, which have no `call` at all to read.
  */
 export type CommandDecision =
   | { kind: 'blocked' }
   | { kind: 'unavailable' }
   | { kind: 'ready'; call: ServiceCall }
-  | { kind: 'confirm'; answer: (confirmed: boolean) => ServiceCall | undefined }
+  | { kind: 'confirm'; steps: 1 | 2; answer: (confirmed: boolean) => ServiceCall | undefined }
 
 export function decideAction(
   action: ActionId,
   state: VehicleState,
   map: EntityMap,
-  confirmActions: ActionId[] | undefined,
+  protection: Protection | undefined,
   payload?: ActionPayload,
   /**
    * Confirms regardless of the configuration. It exists for the hero's lock
    * pill, which is a state READOUT and not a button labelled "Lock": an
-   * accidental tap on it must not command the car, in either direction. The
-   * alternative — putting `lock` in `DEFAULT_CONFIRM_ACTIONS` — would add a
-   * dialog to the actions-row button for everyone who already uses it, which
-   * nobody asked for. Note where it sits: AFTER the block and after
-   * availability, so it can neither get past a car in motion nor invent a
-   * call that `resolveAction` did not produce.
+   * accidental tap on it must not command the car, in either direction. Note
+   * where it sits: AFTER the switch-off, the block and availability, so it
+   * can neither get past a car in motion nor invent a call that
+   * `resolveAction` did not produce.
    */
   forceConfirm?: boolean,
 ): CommandDecision {
+  const p = protection ?? NO_PROTECTION
+  // A function the owner turned off does not exist, whoever asks for it.
+  if (p.disabled.includes(action)) return { kind: 'unavailable' }
   // The while-driving block has to be decided here, not only in the button: a
   // panel that's already open, or a stale render, would bypass a check that
   // only disabled controls.
   if (state.activity === 'driving' && BLOCKED_WHILE_DRIVING.includes(action)) return { kind: 'blocked' }
   const call = resolveAction(action, state, map, payload)
   if (!call) return { kind: 'unavailable' }
-  if (!forceConfirm && !(confirmActions ?? DEFAULT_CONFIRM_ACTIONS).includes(action)) {
-    return { kind: 'ready', call }
-  }
-  return { kind: 'confirm', answer: confirmed => (confirmed ? call : undefined) }
+  const steps = confirmSteps(action, state, p, forceConfirm)
+  if (steps === 0) return { kind: 'ready', call }
+  return { kind: 'confirm', steps, answer: confirmed => (confirmed ? call : undefined) }
 }
 
 /**
@@ -140,9 +191,10 @@ export function lockPillShape(
   state: VehicleState,
   map: EntityMap,
   pending: ActionId | undefined,
+  disabled?: readonly ActionId[],
 ): 'text' | 'button' | 'busy' {
   const action = lockToggleAction(state)
-  if (!isActionAvailable(action, state, map)) return 'text'
+  if (!isActionAvailable(action, state, map, disabled)) return 'text'
   // Through the constant, and not `activity === 'driving'` on its own:
   // which actions motion blocks is decided in a single place, and
   // `decideAction` refuses this same tap on those same grounds.
@@ -360,7 +412,40 @@ export const CONTROL_PANEL: Partial<Record<ActionId, ExpandPanel>> = {}
  * Can this action be a button here? Payload actions have no panel, so they
  * cannot be a button even if the car is addressable.
  */
-export function isActionAvailable(action: ActionId, state: VehicleState, map: EntityMap): boolean {
+export function isActionAvailable(
+  action: ActionId,
+  state: VehicleState,
+  map: EntityMap,
+  /** Functions the owner turned off: they are offered nowhere. */
+  disabled?: readonly ActionId[],
+): boolean {
+  if (disabled?.includes(action)) return false
   if (PAYLOAD_ACTIONS.includes(action)) return false
   return resolveAction(action, state, map) !== undefined
+}
+
+/**
+ * The functions the actions belong to, in the order the row shows them. The
+ * row groups its buttons by these, so what opens the car sits apart from what
+ * warms it, whatever order the configuration lists the actions in.
+ */
+export type ActionGroup = 'access' | 'openings' | 'climate' | 'charging' | 'vehicle'
+
+export const ACTION_GROUP_ORDER: readonly ActionGroup[] = ['access', 'openings', 'climate', 'charging', 'vehicle']
+
+export const ACTION_GROUP: Record<ActionId, ActionGroup> = {
+  unlock: 'access', lock: 'access', trunk: 'access',
+  windows: 'openings', sunshade: 'openings',
+  climate: 'climate', climateOff: 'climate', quickCool: 'climate', quickHeat: 'climate',
+  quickVentilation: 'climate', defrost: 'climate', steeringWheelHeat: 'climate', mirrorHeat: 'climate',
+  driverSeatHeat: 'climate', driverSeatVent: 'climate', passengerSeatHeat: 'climate', passengerSeatVent: 'climate',
+  unlockCharger: 'charging', batteryPreheat: 'charging', setChargeLimit: 'charging',
+  findVehicle: 'vehicle', refresh: 'vehicle',
+}
+
+/** The actions sorted into their groups, empty groups left out, the configured order kept inside each. */
+export function groupActions(actions: readonly ActionId[]): { group: ActionGroup; actions: ActionId[] }[] {
+  return ACTION_GROUP_ORDER
+    .map(group => ({ group, actions: actions.filter(a => ACTION_GROUP[a] === group) }))
+    .filter(g => g.actions.length > 0)
 }

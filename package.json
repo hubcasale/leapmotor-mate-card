@@ -1,6 +1,6 @@
 {
   "name": "leapmotor-mate-card",
-  "version": "0.5.3",
+  "version": "0.6.0",
   "description": "Lovelace card for Leapmotor vehicles in Home Assistant, built for Leapmotor Mate",
   "license": "GPL-3.0-or-later",
   "repository": {
@@ -11,6 +11,7 @@
   "main": "dist/leapmotor-mate-card.js",
   "scripts": {
     "build": "rollup -c",
+    "demo": "rollup -c rollup.demo.mjs",
     "watch": "rollup -c --watch",
     "test": "TZ=UTC vitest run",
     "test:watch": "TZ=UTC vitest",
@@ -20,6 +21,7 @@
     "lit": "^3.2.0"
   },
   "devDependencies": {
+    "@mdi/js": "^7.4.47",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^15.3.0",
     "@rollup/plugin-terser": "^0.4.4",

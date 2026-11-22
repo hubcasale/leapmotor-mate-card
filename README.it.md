@@ -17,7 +17,9 @@ azioni e il pannello del clima sono stati riscritti per Mate; l'aspetto
 — impostazione, gruppi, disegni — è opera dell'autore originale. Licenza:
 GPL-3.0, come l'originale.
 
-![I disegni della scheda: sagoma di profilo e vista dall'alto con le pressioni dei pneumatici](images/drawings.png)
+![La scheda: vista principale, stato del veicolo e pressione dei pneumatici](images/card.png)
+
+![Il clima, la ricarica e il tema scuro](images/climate.png)
 
 ## Requisiti
 
@@ -62,8 +64,10 @@ Basta questo: la scheda trova l'auto da sola. Un esempio più completo:
 type: custom:leapmotor-mate-card
 name: La mia B10
 language: it
+mate_url: http://192.168.1.10:4000
 actions: [unlock, lock, trunk, windows, findVehicle, sunshade]
-confirm_actions: [unlock]
+double_confirm_actions: [unlock, trunk, windows, sunshade]
+disabled_actions: []
 grid: [charging, status, climate, tires, trip, location]
 tire_range: [2.0, 2.6]
 ```
@@ -76,19 +80,59 @@ tire_range: [2.0, 2.6]
 | `language` | quella di Home Assistant | `en`, `it` o `pt`. |
 | `image` | `auto` | `auto` mostra la foto dell'auto da Mate se `mate_url` è indicato, altrimenti la sagoma disegnata, `entity` solo un'immagine, `none` niente, oppure l'indirizzo della tua foto. |
 | `actions` | `[unlock, lock, trunk, windows, findVehicle, sunshade]` | I pulsanti della riga di azioni — vedi sotto. |
-| `confirm_actions` | `[unlock]` | Azioni che chiedono conferma prima. |
+| `double_confirm_actions` | `[unlock, trunk, windows, sunshade]` | Azioni che chiedono conferma **due volte** prima di aprire l'auto — vedi [Sicurezza](#sicurezza). |
+| `confirm_actions` | `[]` | Azioni che chiedono conferma una volta. |
+| `disabled_actions` | `[]` | Funzioni disattivate: nessun pulsante nella scheda. |
+| `image_tap_action` | apre Mate | Cosa fa un tocco sull'auto. Di default apre `mate_url` in una nuova scheda; qualsiasi azione di Home Assistant, oppure `none`. |
 | `grid` | tutti i gruppi | Quali gruppi mostra la griglia e in che ordine. Una voce è il nome di un gruppo oppure `{group, icon, title, summary}`. |
 | `tire_range` | `[2.0, 2.6]` | Pressione normale dei pneumatici, in bar; fuori da questo intervallo un pneumatico è segnalato. |
 | `map_zoom` | `15` | Zoom della mappa della posizione. |
 | `range_tap_action` | `more-info` | Cosa fa un tocco sull'autonomia (vocabolario delle azioni di Home Assistant). |
 | `entities` | nessuno | Sostituisce l'entità usata da un nome logico — vedi sotto. |
 
+### Sicurezza
+
+Aprire l'auto da una dashboard non deve mai succedere per sbaglio.
+
+![Le due conferme prima di sbloccare](images/confirm.png)
+
+- **Doppia conferma prima di aprire.** Sbloccare, aprire il bagagliaio, i
+  finestrini e la tendina chiedono due volte (`double_confirm_actions`). La
+  seconda domanda mette *Conferma* dove prima c'era *Annulla* e lo attiva solo
+  dopo un istante: un doppio tocco nello stesso punto annulla. Una domanda
+  lasciata senza risposta si ritira da sola dopo 20 secondi.
+- **Chiede solo per aprire.** Bloccare, e chiudere bagagliaio, finestrini o
+  tendina, partono subito — a meno che tu non li metta in `confirm_actions`,
+  che chiede una volta.
+- **Le funzioni si possono disattivare.** Ciò che è in `disabled_actions` non
+  ha pulsanti nella riga di azioni, nella vista Stato né sulla pillola delle
+  serrature, e dalla scheda non si può attivare in alcun modo.
+- La pillola delle serrature nell'intestazione chiede sempre, in entrambi i
+  versi, e `unlock`, `lock`, `trunk`, `windows` e `sunshade` sono rifiutate
+  mentre l'auto è in movimento.
+
+```yaml
+# mai sbloccare o aprire il bagagliaio da questa dashboard; una conferma prima del clacson
+disabled_actions: [unlock, trunk]
+confirm_actions: [findVehicle]
+```
+
+### L'editor visuale
+
+Tutte le opzioni sono nell'editor della scheda, raggruppate per funzione:
+**Veicolo** (nome, auto, lingua), **Immagine e tocchi** (indirizzo di Mate,
+immagine, tocco sull'auto, tocco sull'autonomia), **Azioni rapide**,
+**Sicurezza** (chiedi due volte, chiedi una volta, disattivate), **Pneumatici e
+mappa**, e i **Gruppi** mostrati con il loro ordine. Scrive nello YAML solo ciò
+che differisce dai valori predefiniti.
+
 ### La foto dell'auto
 
 Mate serve la foto vera della tua auto — quella che mostra l'app Leapmotor, nel
 colore della tua auto — all'indirizzo `/api/car-picture` della sua interfaccia
 web. Indica `mate_url` e l'intestazione la mostra; se non si riesce a
-caricarla, la scheda torna al disegno.
+caricarla, la scheda torna al disegno. Toccando l'auto si apre Mate (si cambia
+con `image_tap_action`).
 
 ```yaml
 type: custom:leapmotor-mate-card
@@ -119,6 +163,9 @@ salva l'immagine in `config/www/b10.png` e imposta `image: /local/b10.png`.
 `unlockCharger`, `quickCool`, `quickHeat`, `quickVentilation`, `defrost`,
 `climate`, `climateOff`, `batteryPreheat`, `steeringWheelHeat`, `mirrorHeat`,
 `driverSeatHeat`, `driverSeatVent`, `passengerSeatHeat`, `passengerSeatVent`.
+
+La riga di azioni raggruppa i pulsanti per funzione — accesso, aperture,
+clima, ricarica, veicolo — qualunque sia l'ordine in cui li elenchi.
 
 Mate comanda la maggior parte delle funzioni con una coppia di pulsanti, quindi
 la scheda trasforma un tocco nel pulsante che inverte quanto riferisce l'auto:
@@ -199,6 +246,7 @@ npm ci
 npm test          # test unitari e un test di rendering in un DOM
 npm run typecheck
 npm run build     # dist/leapmotor-mate-card.js
+npm run demo      # demo/index.html: la scheda con un'auto Mate finta, senza Home Assistant
 ```
 
 Le release sono costruite dal workflow `build` quando si carica un tag `v*`.
