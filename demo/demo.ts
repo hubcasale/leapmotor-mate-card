@@ -119,6 +119,7 @@ const VIEWS: Record<string, [Record<string, unknown>, Record<string, string>, nu
   climate: [[{}, { 'binary_sensor/climate': 'on', 'sensor/seat_heating_driver': '2', 'sensor/steering_wheel_heat': '1' }, 2]],
   tires: [[{}, { 'sensor/tyre_rr': '1.8' }, 3]],
   confirm: [[{}, {}, undefined, params.get('tap') ?? 'Sblocca']],
+  color: [[{ color: params.get('color') ?? 'blue' }, {}], [{ color: params.get('color') ?? 'blue' }, charging, 0], [{}, {}]],
 }
 VIEWS.all = [...VIEWS.home!, ...VIEWS.charging!, ...VIEWS.status!, ...VIEWS.climate!, ...VIEWS.tires!]
 const wrap = document.getElementById('cards')!

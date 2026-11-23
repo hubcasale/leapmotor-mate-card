@@ -128,6 +128,9 @@ export class LeapmotorCardEditor extends LitElement {
         ] },
         { name: 'map_zoom', selector: { number: { min: MAP_ZOOM_MIN, max: MAP_ZOOM_MAX, mode: 'box' } } },
       ]),
+      section('appearance', 'mdi:palette-outline', [
+        { name: 'color', selector: { ui_color: { include_none: true } } },
+      ]),
     ]
   }
 
@@ -152,6 +155,7 @@ export class LeapmotorCardEditor extends LitElement {
     // user chose, and a later change of a default reaches it.
     for (const key of ['language', 'device', 'name', 'mate_url'] as const) if (raw[key] === '' || raw[key] == null) delete raw[key]
     if (raw.image === 'auto') delete raw.image
+    if (raw.color === '' || raw.color == null || raw.color === 'none') delete raw.color
     if (raw.map_zoom === DEFAULT_MAP_ZOOM) delete raw.map_zoom
     if (same(raw.tire_range, DEFAULT_TIRE_RANGE)) delete raw.tire_range
     if (same(raw.actions, DEFAULT_ACTIONS)) delete raw.actions

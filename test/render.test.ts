@@ -244,6 +244,28 @@ describe('the tap on the car', () => {
   })
 })
 
+describe('the card\'s own colour', () => {
+  it('keeps the theme\'s look when no colour is set', async () => {
+    const el = await mount()
+    expect(el.hasAttribute('tinted')).toBe(false)
+    expect(el.style.getPropertyValue('--lm-tint')).toBe('')
+  })
+
+  it('carries the colour on the host, and drops it when the option goes away', async () => {
+    const el = await mount({ color: 'amber' })
+    expect(el.hasAttribute('tinted')).toBe(true)
+    expect(el.style.getPropertyValue('--lm-tint')).toBe('var(--amber-color, #ffc107)')
+    el.setConfig({ type: 'custom:leapmotor-mate-card', language: 'en' })
+    expect(el.hasAttribute('tinted')).toBe(false)
+    expect(el.style.getPropertyValue('--lm-tint')).toBe('')
+  })
+
+  it('ignores a value that is not a colour', async () => {
+    const el = await mount({ color: 'red; display: none' })
+    expect(el.hasAttribute('tinted')).toBe(false)
+  })
+})
+
 describe('the editor', () => {
   it('lays the options out in sections, one per function, each field labelled', async () => {
     const ed = document.createElement('leapmotor-mate-card-editor') as unknown as HTMLElement & { hass: HomeAssistant; setConfig(c: unknown): void; updateComplete: Promise<unknown> }
@@ -256,10 +278,10 @@ describe('the editor', () => {
       computeLabel: (s: { name: string }) => string
       data: Record<string, unknown>
     }
-    expect(form.schema.map(s => s.title)).toEqual(['Veicolo', 'Immagine e tocchi', 'Azioni rapide', 'Sicurezza', 'Pneumatici e mappa'])
+    expect(form.schema.map(s => s.title)).toEqual(['Veicolo', 'Immagine e tocchi', 'Azioni rapide', 'Sicurezza', 'Pneumatici e mappa', 'Aspetto'])
     const names = form.schema.flatMap(s => s.schema.flatMap(f => (f.schema ? f.schema.map(g => g.name) : [f.name])))
     for (const name of names) expect(form.computeLabel({ name }), name).not.toMatch(/^editor\./)
-    expect(names).toEqual(expect.arrayContaining(['mate_url', 'image_tap_action', 'double_confirm_actions', 'confirm_actions', 'disabled_actions', 'tire_min', 'tire_max']))
+    expect(names).toEqual(expect.arrayContaining(['mate_url', 'image_tap_action', 'double_confirm_actions', 'confirm_actions', 'disabled_actions', 'tire_min', 'tire_max', 'color']))
     expect(form.data.double_confirm_actions).toEqual(['unlock', 'trunk', 'windows', 'sunshade'])
   })
 

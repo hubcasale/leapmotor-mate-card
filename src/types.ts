@@ -41,6 +41,14 @@ export interface LeapmotorCardConfig {
   type: string
   device?: string
   name?: string
+  /**
+   * A colour of the card's own: its background takes a tint of it and its
+   * border follows, so the card is told apart at a glance on a dashboard of
+   * coloured blocks. A name from Home Assistant's palette (`blue`, `amber`,
+   * `deep-purple`…) or a CSS colour. Absent, the card looks as the theme
+   * draws it.
+   */
+  color?: string
   language?: string
   /**
    * Address of Leapmotor Mate's web interface (`http://192.168.1.10:4000`). With

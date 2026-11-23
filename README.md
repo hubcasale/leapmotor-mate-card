@@ -91,6 +91,7 @@ tire_range: [2.0, 2.6]
 | `grid` | all groups | Which groups the grid shows, and in what order. An entry is a group name or `{group, icon, title, summary}`. |
 | `tire_range` | `[2.0, 2.6]` | Normal tyre pressure, in bar; outside it a tyre is flagged. |
 | `map_zoom` | `15` | Zoom of the location map. |
+| `color` | none | A colour of the card's own: its background takes a tint of it and its border follows, like a coloured section of the dashboard. A name from Home Assistant's palette (`blue`, `amber`, `deep-purple`…) or a CSS colour (`#7e57c2`). |
 | `range_tap_action` | `more-info` | What a tap on the range does (Home Assistant's action vocabulary). |
 | `entities` | none | Overrides which entity a logical name uses — see below. |
 

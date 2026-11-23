@@ -92,6 +92,7 @@ tire_range: [2.0, 2.6]
 | `grid` | tutti i gruppi | Quali gruppi mostra la griglia e in che ordine. Una voce è il nome di un gruppo oppure `{group, icon, title, summary}`. |
 | `tire_range` | `[2.0, 2.6]` | Pressione normale dei pneumatici, in bar; fuori da questo intervallo un pneumatico è segnalato. |
 | `map_zoom` | `15` | Zoom della mappa della posizione. |
+| `color` | nessuno | Un colore proprio della scheda: lo sfondo ne prende una tinta e il bordo lo segue, come un blocco colorato della plancia. Un nome della tavolozza di Home Assistant (`blue`, `amber`, `deep-purple`…) oppure un colore CSS (`#7e57c2`). |
 | `range_tap_action` | `more-info` | Cosa fa un tocco sull'autonomia (vocabolario delle azioni di Home Assistant). |
 | `entities` | nessuno | Sostituisce l'entità usata da un nome logico — vedi sotto. |
 

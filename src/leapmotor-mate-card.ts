@@ -17,7 +17,7 @@ import { createTranslator, pickLanguage, type TranslateFn } from './localize'
 import { resolveEntities, type ResolveResult } from './resolver'
 import type { GridTile, LeapmotorGroupGrid } from './sections/group-grid'
 import { resolveTapAction, type TapDecision } from './tap-action'
-import { sharedStyles } from './theme'
+import { sharedStyles, tintColor } from './theme'
 import {
   DEFAULT_ACTIONS, clampMapZoom, clampTireRange, mapRequestChanged,
   type ActionId, type GroupId, type LeapmotorCardConfig, type MapRequest, type VehicleState,
@@ -36,7 +36,7 @@ import './sections/tires'
 import './sections/trip'
 import './sections/comfort'
 
-export const CARD_VERSION = '0.6.0'
+export const CARD_VERSION = '0.7.0'
 
 
 console.info(
@@ -135,6 +135,12 @@ export class LeapmotorCard extends LitElement {
     if (!config) throw new Error('Invalid configuration')
     this._config = { ...config }
     this._resolveCache = undefined
+    // The colour sits on the host, not on a template: the card has three
+    // `ha-card`s (loading, no car, the car) and all of them are this card.
+    const tint = tintColor(config.color)
+    this.toggleAttribute('tinted', tint !== undefined)
+    if (tint !== undefined) this.style.setProperty('--lm-tint', tint)
+    else this.style.removeProperty('--lm-tint')
     // Everything that follows belonged to the previous car. Without this,
     // changing `device` in the editor left the map pinning the old car
     // (`ensureMap` bails out right at the start because of `_mapRequested`)
@@ -696,6 +702,17 @@ export class LeapmotorCard extends LitElement {
 
   static override styles = [sharedStyles, css`
     ha-card { overflow: hidden; position: relative; }
+    /*
+     * The color option. The tint is mixed into the theme's card
+     * background rather than laid over it, so it reads the same on a light
+     * and on a dark theme; the tiles inside go back to the card background
+     * (see --lm-chip in theme.ts).
+     */
+    :host([tinted]) { --lm-tint-chip: color-mix(in srgb, var(--card-background-color, #fff) 86%, transparent); }
+    :host([tinted]) ha-card {
+      background: color-mix(in srgb, var(--lm-tint) 30%, var(--ha-card-background, var(--card-background-color, #fff)));
+      border: 1px solid color-mix(in srgb, var(--lm-tint) 55%, transparent);
+    }
     .body { padding: var(--lm-gap); }
     /*
      * The confirmation covers the card it belongs to, and only it: the

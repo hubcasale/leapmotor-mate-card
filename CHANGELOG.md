@@ -5,6 +5,17 @@ Every notable change to this project is recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] — 2026-11-23
+
+### Added
+
+- **A colour of the card's own.** New option `color`, in the editor under
+  *Appearance*: the card's background takes a tint of the colour and its
+  border follows, while the tiles and buttons inside keep the theme's card
+  background — the look of a coloured section of the dashboard. A name from
+  Home Assistant's palette follows the theme; hand-written YAML may give any
+  CSS colour. Without it the card looks as it did.
+
 ## [0.6.0] — 2026-11-22
 
 ### Added
